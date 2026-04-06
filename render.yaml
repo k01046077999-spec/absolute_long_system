@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: absolute-long-system
+    name: absolute-long-system-upbit
     env: python
     plan: starter
     buildCommand: pip install -r requirements.txt
@@ -11,6 +11,6 @@ services:
       - key: SCAN_TIMEFRAMES
         value: 1h,4h
       - key: EXCHANGE_ID
-        value: binance
+        value: upbit
       - key: QUOTE
-        value: USDT
+        value: KRW
