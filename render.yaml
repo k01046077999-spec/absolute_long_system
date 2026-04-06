@@ -1,16 +1,19 @@
 services:
   - type: web
-    name: absolute-long-system-upbit
+    name: presidential-gilsu-long-upbit
     env: python
-    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: SCAN_SYMBOL_LIMIT
-        value: 40
-      - key: SCAN_TIMEFRAMES
-        value: 1h,4h
       - key: EXCHANGE_ID
         value: upbit
       - key: QUOTE
         value: KRW
+      - key: SCAN_TIMEFRAMES
+        value: 1h
+      - key: SCAN_SYMBOL_LIMIT
+        value: 40
+      - key: BTC_BENCHMARK
+        value: BTC/KRW
+      - key: PYTHON_VERSION
+        value: 3.11.9

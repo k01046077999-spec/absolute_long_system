@@ -6,10 +6,13 @@ from typing import List
 
 import ccxt
 
-
 DEFAULT_EXCHANGE = os.getenv('EXCHANGE_ID', 'upbit').lower()
 DEFAULT_QUOTE = os.getenv('QUOTE', 'KRW').upper()
 EXCLUDED_BASES = {'USDC', 'FDUSD', 'TUSD', 'USDP'}
+HARD_BLOCK_BASES = {
+    'DOGE', 'SHIB', 'PEPE', 'BONK', 'FLOKI', 'WIF', 'PENGU', 'BOME', '1000PEPE',
+    '1000BONK', 'TRUMP', 'MELANIA', 'BRETT', 'MEME', 'TURBO', 'POPCAT'
+}
 
 
 def _volume_rank_value(market: dict) -> float:
@@ -49,24 +52,32 @@ def normalize_symbol(symbol: str, quote: str = DEFAULT_QUOTE) -> str:
     raise ValueError(f'unsupported_symbol_for_{DEFAULT_EXCHANGE}: {symbol}')
 
 
-def get_symbols(limit: int = 80, quote: str = DEFAULT_QUOTE) -> List[str]:
+def _is_allowed_market(symbol: str, market: dict, quote: str) -> bool:
+    if not market.get('active', True):
+        return False
+    if market.get('spot') is not True:
+        return False
+    if str(market.get('quote', '')).upper() != quote.upper():
+        return False
+    base = str(market.get('base', '')).upper()
+    if base in EXCLUDED_BASES or base in HARD_BLOCK_BASES:
+        return False
+    return True
+
+
+def get_symbols(limit: int = 80, quote: str = DEFAULT_QUOTE, min_quote_volume_krw: float = 5_000_000_000) -> List[str]:
     exchange = get_exchange()
     markets = exchange.markets
-    symbols: List[str] = []
-    quote = quote.upper()
+    ranked: List[tuple[str, float]] = []
     for symbol, market in markets.items():
-        if not market.get('active', True):
+        if not _is_allowed_market(symbol, market, quote):
             continue
-        if market.get('spot') is not True:
+        score = _volume_rank_value(market)
+        if score < min_quote_volume_krw:
             continue
-        if str(market.get('quote', '')).upper() != quote:
-            continue
-        if str(market.get('base', '')).upper() in EXCLUDED_BASES:
-            continue
-        symbols.append(symbol)
-
-    ranked = sorted(symbols, key=lambda s: _volume_rank_value(markets[s]), reverse=True)
-    return ranked[:limit]
+        ranked.append((symbol, score))
+    ranked.sort(key=lambda x: x[1], reverse=True)
+    return [symbol for symbol, _ in ranked[:limit]]
 
 
 def fetch_ohlcv(symbol: str, timeframe: str = '1h', limit: int = 300) -> List[List[float]]:
