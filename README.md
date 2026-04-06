@@ -57,3 +57,13 @@ curl "http://localhost:8000/scan/single?symbol=XRP/KRW&timeframe=4h"
 - 업비트 기준이므로 해외 USDT 마켓과 결과가 다를 수 있습니다.
 - KRW 마켓 특성상 거래대금/유동성 순위가 바이낸스와 다릅니다.
 - 전략 논리는 같아도, 시장 풀 자체가 달라져 후보 종목이 달라지는 건 정상입니다.
+
+## Render 안정 배포 설정
+
+이 프로젝트는 Render에서 **Python 3.11.9** 기준으로 배포하도록 맞춰져 있습니다.
+
+- `runtime.txt` 포함
+- 빌드 커맨드: `pip install -r requirements.txt`
+- 스타트 커맨드: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+
+만약 Render에서 기본 최신 Python으로 잡히면 `pydantic-core` 설치 오류가 날 수 있으니, 반드시 이 프로젝트 루트의 `runtime.txt`가 함께 올라가야 합니다.
