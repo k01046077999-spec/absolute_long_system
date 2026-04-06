@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: absolute-long-system
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SCAN_SYMBOL_LIMIT
+        value: 40
+      - key: SCAN_TIMEFRAMES
+        value: 1h,4h
+      - key: EXCHANGE_ID
+        value: binance
+      - key: QUOTE
+        value: USDT
