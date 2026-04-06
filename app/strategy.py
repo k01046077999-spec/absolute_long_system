@@ -256,6 +256,9 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     if fib_meta.get('in_fib_buy_zone'):
         score += 20
         reasons.append('가격이 0.618~0.786 되돌림 구간')
+    elif not strict and fib_meta.get('in_relaxed_fib_buy_zone'):
+        score += 12
+        reasons.append('가격이 0.5~0.786 완화 되돌림 구간')
     if wave_ok and wave_meta.get('break_high_target'):
         score += 15
         reasons.append('상승 파동 higher low + 전고점 회복 시도')
@@ -274,9 +277,12 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     if current_rsi is not None and 28 <= current_rsi <= 48:
         score += 10
         reasons.append('RSI 위치가 롱 진입 부담이 과하지 않음')
+    elif not strict and current_rsi is not None and 30 <= current_rsi <= 58:
+        score += 6
+        reasons.append('RSI 위치가 서브 후보 범위 안')
 
     hard_fail = False
-    if not regime.allowed and strict:
+    if strict and not regime.allowed:
         hard_fail = True
     if fib_meta.get('fib_invalidated'):
         hard_fail = True
@@ -291,7 +297,19 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     if strict and not wave_ok:
         hard_fail = True
 
-    min_score = 85 if strict else 72
+    sub_structure_ok = bool(
+        bull_div or
+        div_meta.get('three_pivot_linked') or
+        wave_ok or
+        fib_meta.get('in_relaxed_fib_buy_zone')
+    )
+    sub_trend_ok = bool(above_ema20 or above_ema60)
+
+    min_score = 85 if strict else 52
+    if not strict and not sub_structure_ok:
+        return None
+    if not strict and not sub_trend_ok:
+        return None
     if hard_fail or score < min_score:
         return None
 
@@ -299,7 +317,7 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     stop_loss_pct = abs(pct_change(price, swing_low))
     if strict and (stop_loss_pct < 2.5 or stop_loss_pct > 8.5):
         return None
-    if not strict and stop_loss_pct > 10.0:
+    if not strict and stop_loss_pct > 12.5:
         return None
     if stop_loss_pct < 2.5:
         stop_loss_pct = 2.5
@@ -314,6 +332,8 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
         'ema60': safe_round(ema60[-1]),
         'ema200': safe_round(ema200[-1]),
         'strict_mode': strict,
+        'sub_structure_ok': sub_structure_ok if not strict else None,
+        'sub_trend_ok': sub_trend_ok if not strict else None,
         'pivot_count': len(pivots),
     }
     meta.update({k: safe_round(v, 4) if isinstance(v, float) else v for k, v in div_meta.items()})
