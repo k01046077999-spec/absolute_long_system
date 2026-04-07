@@ -13,7 +13,7 @@ from .strategy import (
     signal_to_dict,
 )
 
-app = FastAPI(title='Presidential Gilsu Long System Upbit', version='2.4.1')
+app = FastAPI(title='Presidential Gilsu Long System Upbit', version='2.4.2')
 
 DEFAULT_TIMEFRAMES = os.getenv('SCAN_TIMEFRAMES', '1h').split(',')
 DEFAULT_UNIVERSE_LIMIT = int(os.getenv('SCAN_UNIVERSE_LIMIT', '70'))

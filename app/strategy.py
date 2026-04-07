@@ -143,6 +143,17 @@ def _fib_zone(closes: List[float], highs: List[float], lows: List[float], lookba
     }
 
 
+
+
+def _recent_stop_anchor(lows: List[float], fallback: float) -> float:
+    pivots = pivot_lows(lows, 3, 3)
+    if pivots:
+        recent = [p.value for p in pivots if p.index >= max(0, len(lows) - 40)]
+        if recent:
+            return float(recent[-1])
+    tail = lows[-30:] if len(lows) >= 30 else lows
+    return float(min(tail)) if tail else float(fallback)
+
 def _volume_ok(volume: List[float], closes: List[float]) -> Dict[str, float | bool | None]:
     if len(volume) < 25:
         return {"volume_ok": False}
@@ -310,6 +321,9 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
         if above_ema200:
             score += 6
             reasons.append('EMA200 대비 과도한 침체 아님')
+        if not bull_div and not fib_meta.get('in_relaxed_fib_buy_zone') and wave_ok:
+            score += 6
+            reasons.append('구조 우선 후보 보정')
         if current_rsi is not None and 32 <= current_rsi <= 62:
             score += 10
             reasons.append('RSI가 서브 후보 범위')
@@ -320,9 +334,9 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     hard_fail = False
     if strict and not regime.allowed:
         hard_fail = True
-    if strict and fib_meta.get('fib_invalidated'):
+    if fib_meta.get('fib_invalidated'):
         hard_fail = True
-    if strict and not not_far_above_ema200:
+    if not not_far_above_ema200:
         hard_fail = True
     if strict and ext_meta.get('overextended'):
         hard_fail = True
@@ -342,19 +356,20 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     )
     sub_trend_ok = bool(above_ema20 or above_ema60 or (current_rsi is not None and current_rsi >= 38))
 
-    min_score = 85 if strict else 24
+    min_score = 85 if strict else 14
     if not strict and not regime.allowed:
         return None
-    if strict and (hard_fail or score < min_score):
-        return None
-    if not strict and score < min_score:
+    if hard_fail or score < min_score:
         return None
 
-    swing_low = float(fib_meta['fib_1']) if fib_meta.get('fib_1') is not None else min(series.low[-20:])
+    if strict:
+        swing_low = float(fib_meta['fib_1'])
+    else:
+        swing_low = _recent_stop_anchor(series.low, float(fib_meta['fib_1']))
     stop_loss_pct = abs(pct_change(price, swing_low))
     if strict and (stop_loss_pct < 2.5 or stop_loss_pct > 8.5):
         return None
-    if not strict and stop_loss_pct > 30.0:
+    if not strict and stop_loss_pct > 45.0:
         return None
     if stop_loss_pct < 2.5:
         stop_loss_pct = 2.5
@@ -373,6 +388,7 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
         'sub_trend_ok': sub_trend_ok if not strict else None,
         'sub_scored_only': (not strict),
         'pivot_count': len(pivots),
+        'stop_anchor_price': safe_round(swing_low),
     }
     meta.update({k: safe_round(v, 4) if isinstance(v, float) else v for k, v in div_meta.items()})
     meta.update({k: safe_round(v, 4) if isinstance(v, float) else v for k, v in wave_meta.items()})
@@ -390,7 +406,7 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
         take_profit_2_pct=take_profit_2_pct,
         score=score,
         regime_score=regime.score,
-        signal_name='presidential_gilsu_long_main' if strict else 'presidential_gilsu_long_sub_scored',
+        signal_name='presidential_gilsu_long_main' if strict else 'presidential_gilsu_long_sub',
         reasons=reasons + ([f'BTC 시장 필터 통과({regime.score})'] if regime.allowed else []),
         meta=meta,
     )

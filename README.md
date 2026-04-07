@@ -51,6 +51,8 @@ PYTHON_VERSION=3.11.9
 - `SCAN_SHORTLIST_LIMIT_SUB=20`
 
 
-## v2.4.1 note
-- Main logic preserved from the prior complete strict version.
-- Only Sub mode was relaxed into a scored candidate generator.
+## v2.4.2 final
+- Main logic preserved
+- Sub logic relaxed: score threshold lowered to 14
+- Sub stop anchor uses recent pivot/last 30 bars instead of 120-bar swing low
+- Sub max stop widened to 45%
