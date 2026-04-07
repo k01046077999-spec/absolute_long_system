@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from typing import List
+from typing import Dict, List
 
 import ccxt
 
@@ -15,20 +15,31 @@ HARD_BLOCK_BASES = {
 }
 
 
-def _volume_rank_value(market: dict) -> float:
-    info = market.get('info', {}) or {}
+def _safe_float(value) -> float:
+    try:
+        return float(value) if value is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _volume_rank_value(symbol: str, market: dict, tickers: Dict[str, dict] | None = None) -> float:
+    ticker = (tickers or {}).get(symbol, {}) or {}
+    info = ticker.get('info', {}) or {}
+    market_info = market.get('info', {}) or {}
     candidates = [
-        info.get('quoteVolume'),
+        ticker.get('quoteVolume'),
+        ticker.get('baseVolume'),
         info.get('acc_trade_price_24h'),
         info.get('acc_trade_price'),
+        market_info.get('acc_trade_price_24h'),
+        market_info.get('acc_trade_price'),
+        ticker.get('vwap'),
         info.get('trade_price'),
     ]
     for value in candidates:
-        try:
-            if value is not None:
-                return float(value)
-        except (TypeError, ValueError):
-            continue
+        fv = _safe_float(value)
+        if fv > 0:
+            return fv
     return 0.0
 
 
@@ -65,19 +76,31 @@ def _is_allowed_market(symbol: str, market: dict, quote: str) -> bool:
     return True
 
 
-def get_symbols(limit: int = 80, quote: str = DEFAULT_QUOTE, min_quote_volume_krw: float = 5_000_000_000) -> List[str]:
+def get_symbols(limit: int = 80, quote: str = DEFAULT_QUOTE, min_quote_volume_krw: float = 2_000_000_000) -> List[str]:
     exchange = get_exchange()
     markets = exchange.markets
+    try:
+        tickers = exchange.fetch_tickers()
+    except Exception:
+        tickers = {}
+
     ranked: List[tuple[str, float]] = []
+    fallback: List[tuple[str, float]] = []
     for symbol, market in markets.items():
         if not _is_allowed_market(symbol, market, quote):
             continue
-        score = _volume_rank_value(market)
-        if score < min_quote_volume_krw:
-            continue
-        ranked.append((symbol, score))
+        score = _volume_rank_value(symbol, market, tickers)
+        if score >= min_quote_volume_krw:
+            ranked.append((symbol, score))
+        elif score > 0:
+            fallback.append((symbol, score))
+
     ranked.sort(key=lambda x: x[1], reverse=True)
-    return [symbol for symbol, _ in ranked[:limit]]
+    fallback.sort(key=lambda x: x[1], reverse=True)
+    chosen = ranked if ranked else fallback
+    if not chosen:
+        chosen = [(symbol, 0.0) for symbol, market in markets.items() if _is_allowed_market(symbol, market, quote)]
+    return [symbol for symbol, _ in chosen[:limit]]
 
 
 def fetch_ohlcv(symbol: str, timeframe: str = '1h', limit: int = 300) -> List[List[float]]:

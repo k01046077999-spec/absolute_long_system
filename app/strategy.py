@@ -342,12 +342,8 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     )
     sub_trend_ok = bool(above_ema20 or above_ema60 or (current_rsi is not None and current_rsi >= 38))
 
-    min_score = 85 if strict else 34
+    min_score = 85 if strict else 28
     if not strict and not regime.allowed:
-        return None
-    if not strict and not sub_structure_ok:
-        return None
-    if not strict and not sub_trend_ok:
         return None
     if hard_fail or score < min_score:
         return None
@@ -356,7 +352,7 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     stop_loss_pct = abs(pct_change(price, swing_low))
     if strict and (stop_loss_pct < 2.5 or stop_loss_pct > 8.5):
         return None
-    if not strict and stop_loss_pct > 16.0:
+    if not strict and stop_loss_pct > 22.0:
         return None
     if stop_loss_pct < 2.5:
         stop_loss_pct = 2.5
@@ -373,6 +369,7 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
         'strict_mode': strict,
         'sub_structure_ok': sub_structure_ok if not strict else None,
         'sub_trend_ok': sub_trend_ok if not strict else None,
+        'sub_scored_only': (not strict),
         'pivot_count': len(pivots),
     }
     meta.update({k: safe_round(v, 4) if isinstance(v, float) else v for k, v in div_meta.items()})
