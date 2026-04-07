@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from functools import lru_cache
 from typing import Dict, List
 
@@ -13,6 +14,18 @@ HARD_BLOCK_BASES = {
     'DOGE', 'SHIB', 'PEPE', 'BONK', 'FLOKI', 'WIF', 'PENGU', 'BOME', '1000PEPE',
     '1000BONK', 'TRUMP', 'MELANIA', 'BRETT', 'MEME', 'TURBO', 'POPCAT'
 }
+REQUEST_SLEEP = float(os.getenv('REQUEST_SLEEP', '0.18'))
+
+_last_request_ts = 0.0
+
+
+def _throttle() -> None:
+    global _last_request_ts
+    now = time.time()
+    wait = REQUEST_SLEEP - (now - _last_request_ts)
+    if wait > 0:
+        time.sleep(wait)
+    _last_request_ts = time.time()
 
 
 def _safe_float(value) -> float:
@@ -20,27 +33,6 @@ def _safe_float(value) -> float:
         return float(value) if value is not None else 0.0
     except (TypeError, ValueError):
         return 0.0
-
-
-def _volume_rank_value(symbol: str, market: dict, tickers: Dict[str, dict] | None = None) -> float:
-    ticker = (tickers or {}).get(symbol, {}) or {}
-    info = ticker.get('info', {}) or {}
-    market_info = market.get('info', {}) or {}
-    candidates = [
-        ticker.get('quoteVolume'),
-        ticker.get('baseVolume'),
-        info.get('acc_trade_price_24h'),
-        info.get('acc_trade_price'),
-        market_info.get('acc_trade_price_24h'),
-        market_info.get('acc_trade_price'),
-        ticker.get('vwap'),
-        info.get('trade_price'),
-    ]
-    for value in candidates:
-        fv = _safe_float(value)
-        if fv > 0:
-            return fv
-    return 0.0
 
 
 @lru_cache(maxsize=1)
@@ -76,20 +68,42 @@ def _is_allowed_market(symbol: str, market: dict, quote: str) -> bool:
     return True
 
 
-def get_symbols(limit: int = 80, quote: str = DEFAULT_QUOTE, min_quote_volume_krw: float = 2_000_000_000) -> List[str]:
+def fetch_all_tickers() -> Dict[str, dict]:
     exchange = get_exchange()
-    markets = exchange.markets
-    try:
-        tickers = exchange.fetch_tickers()
-    except Exception:
-        tickers = {}
+    _throttle()
+    return exchange.fetch_tickers()
 
+
+def _ticker_rank_value(symbol: str, ticker: dict, market: dict) -> float:
+    info = ticker.get('info', {}) or {}
+    market_info = market.get('info', {}) or {}
+    candidates = [
+        ticker.get('quoteVolume'),
+        ticker.get('baseVolume'),
+        info.get('acc_trade_price_24h'),
+        info.get('acc_trade_price'),
+        market_info.get('acc_trade_price_24h'),
+        market_info.get('acc_trade_price'),
+        info.get('trade_price'),
+        ticker.get('last'),
+    ]
+    for value in candidates:
+        fv = _safe_float(value)
+        if fv > 0:
+            return fv
+    return 0.0
+
+
+def get_symbols(limit: int = 80, quote: str = DEFAULT_QUOTE, min_quote_volume_krw: float = 1_000_000_000) -> List[str]:
+    exchange = get_exchange()
+    tickers = fetch_all_tickers()
     ranked: List[tuple[str, float]] = []
     fallback: List[tuple[str, float]] = []
-    for symbol, market in markets.items():
+    for symbol, market in exchange.markets.items():
         if not _is_allowed_market(symbol, market, quote):
             continue
-        score = _volume_rank_value(symbol, market, tickers)
+        ticker = tickers.get(symbol, {}) or {}
+        score = _ticker_rank_value(symbol, ticker, market)
         if score >= min_quote_volume_krw:
             ranked.append((symbol, score))
         elif score > 0:
@@ -98,12 +112,11 @@ def get_symbols(limit: int = 80, quote: str = DEFAULT_QUOTE, min_quote_volume_kr
     ranked.sort(key=lambda x: x[1], reverse=True)
     fallback.sort(key=lambda x: x[1], reverse=True)
     chosen = ranked if ranked else fallback
-    if not chosen:
-        chosen = [(symbol, 0.0) for symbol, market in markets.items() if _is_allowed_market(symbol, market, quote)]
     return [symbol for symbol, _ in chosen[:limit]]
 
 
 def fetch_ohlcv(symbol: str, timeframe: str = '1h', limit: int = 300) -> List[List[float]]:
     exchange = get_exchange()
     normalized = normalize_symbol(symbol)
+    _throttle()
     return exchange.fetch_ohlcv(normalized, timeframe=timeframe, limit=limit)

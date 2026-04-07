@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import os
-from typing import List
+from typing import Dict, List, Tuple
 
 from fastapi import FastAPI, HTTPException, Query
 
 from .market import DEFAULT_EXCHANGE, DEFAULT_QUOTE, fetch_ohlcv, get_symbols, normalize_symbol
-from .strategy import analyze_long_signal, evaluate_market_regime, signal_to_dict
+from .strategy import (
+    analyze_long_signal,
+    coarse_symbol_score,
+    evaluate_market_regime,
+    signal_to_dict,
+)
 
-app = FastAPI(title='Presidential Gilsu Long System Upbit', version='2.2.0')
+app = FastAPI(title='Presidential Gilsu Long System Upbit', version='2.3.0')
 
 DEFAULT_TIMEFRAMES = os.getenv('SCAN_TIMEFRAMES', '1h').split(',')
-DEFAULT_SYMBOL_LIMIT = int(os.getenv('SCAN_SYMBOL_LIMIT', '40'))
+DEFAULT_UNIVERSE_LIMIT = int(os.getenv('SCAN_UNIVERSE_LIMIT', '70'))
+DEFAULT_SHORTLIST_LIMIT_MAIN = int(os.getenv('SCAN_SHORTLIST_LIMIT_MAIN', '14'))
+DEFAULT_SHORTLIST_LIMIT_SUB = int(os.getenv('SCAN_SHORTLIST_LIMIT_SUB', '20'))
 BTC_BENCHMARK = os.getenv('BTC_BENCHMARK', 'BTC/KRW')
 
 
@@ -26,6 +33,25 @@ def _load_regime() -> dict:
         'meta': regime.meta,
         'obj': regime,
     }
+
+
+def _build_shortlist(symbols: List[str], timeframe: str, shortlist_limit: int) -> Tuple[List[str], List[dict], int]:
+    ranked: List[Tuple[str, int]] = []
+    errors: List[dict] = []
+    coarse_scanned = 0
+    for symbol in symbols:
+        try:
+            coarse_ohlcv = fetch_ohlcv(symbol, timeframe=timeframe, limit=90)
+            score = coarse_symbol_score(coarse_ohlcv)
+            coarse_scanned += 1
+            ranked.append((symbol, score))
+        except Exception as exc:
+            errors.append({'symbol': symbol, 'timeframe': timeframe, 'stage': 'coarse', 'error': str(exc)})
+    ranked.sort(key=lambda x: x[1], reverse=True)
+    shortlist = [symbol for symbol, score in ranked if score >= 20][:shortlist_limit]
+    if not shortlist:
+        shortlist = [symbol for symbol, _ in ranked[:shortlist_limit]]
+    return shortlist, errors, coarse_scanned
 
 
 @app.get('/health')
@@ -44,20 +70,21 @@ def health() -> dict:
 
 @app.get('/scan/main')
 def scan_main(
-    symbol_limit: int = Query(DEFAULT_SYMBOL_LIMIT, ge=5, le=200),
+    universe_limit: int = Query(DEFAULT_UNIVERSE_LIMIT, ge=20, le=160),
+    shortlist_limit: int = Query(DEFAULT_SHORTLIST_LIMIT_MAIN, ge=5, le=40),
     timeframes: str = Query(','.join(DEFAULT_TIMEFRAMES)),
 ) -> dict:
     frames = [x.strip() for x in timeframes.split(',') if x.strip()]
+    primary_tf = frames[0] if frames else '1h'
     try:
-        symbols = get_symbols(limit=symbol_limit)
+        universe = get_symbols(limit=universe_limit)
         regime = _load_regime()
+        shortlist, errors, coarse_scanned = _build_shortlist(universe, timeframe=primary_tf, shortlist_limit=shortlist_limit)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f'market_load_failed: {exc}') from exc
 
     signals: List[dict] = []
-    errors: List[dict] = []
-
-    for symbol in symbols:
+    for symbol in shortlist:
         for tf in frames:
             try:
                 ohlcv = fetch_ohlcv(symbol, timeframe=tf, limit=320)
@@ -65,7 +92,7 @@ def scan_main(
                 if signal is not None:
                     signals.append(signal_to_dict(signal))
             except Exception as exc:
-                errors.append({'symbol': symbol, 'timeframe': tf, 'error': str(exc)})
+                errors.append({'symbol': symbol, 'timeframe': tf, 'stage': 'detail', 'error': str(exc)})
 
     signals = sorted(signals, key=lambda x: (x['score'], x['regime_score'], -x['stop_loss_pct']), reverse=True)
     return {
@@ -79,7 +106,9 @@ def scan_main(
         'btc_regime_meta': regime['meta'],
         'count': len(signals),
         'signals': signals[:20],
-        'scanned_symbols': len(symbols),
+        'universe_symbols': len(universe),
+        'coarse_scanned_symbols': coarse_scanned,
+        'shortlisted_symbols': len(shortlist),
         'timeframes': frames,
         'errors': errors[:20],
     }
@@ -87,26 +116,26 @@ def scan_main(
 
 @app.get('/scan/sub')
 def scan_sub(
-    symbol_limit: int = Query(DEFAULT_SYMBOL_LIMIT, ge=5, le=200),
+    universe_limit: int = Query(DEFAULT_UNIVERSE_LIMIT, ge=20, le=160),
+    shortlist_limit: int = Query(DEFAULT_SHORTLIST_LIMIT_SUB, ge=8, le=60),
     timeframe: str = Query('1h'),
 ) -> dict:
     try:
-        symbols = get_symbols(limit=symbol_limit)
+        universe = get_symbols(limit=universe_limit)
         regime = _load_regime()
+        shortlist, errors, coarse_scanned = _build_shortlist(universe, timeframe=timeframe, shortlist_limit=shortlist_limit)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f'market_load_failed: {exc}') from exc
 
     signals: List[dict] = []
-    errors: List[dict] = []
-
-    for symbol in symbols:
+    for symbol in shortlist:
         try:
             ohlcv = fetch_ohlcv(symbol, timeframe=timeframe, limit=320)
             signal = analyze_long_signal(symbol, timeframe, ohlcv, regime['obj'], strict=False)
             if signal is not None:
                 signals.append(signal_to_dict(signal))
         except Exception as exc:
-            errors.append({'symbol': symbol, 'timeframe': timeframe, 'error': str(exc)})
+            errors.append({'symbol': symbol, 'timeframe': timeframe, 'stage': 'detail', 'error': str(exc)})
 
     signals = sorted(signals, key=lambda x: (x['score'], x['regime_score'], -x['stop_loss_pct']), reverse=True)
     return {
@@ -119,8 +148,10 @@ def scan_sub(
         'btc_regime_reasons': regime['reasons'],
         'btc_regime_meta': regime['meta'],
         'count': len(signals),
-        'signals': signals[:20],
-        'scanned_symbols': len(symbols),
+        'signals': signals[:25],
+        'universe_symbols': len(universe),
+        'coarse_scanned_symbols': coarse_scanned,
+        'shortlisted_symbols': len(shortlist),
         'timeframe': timeframe,
         'errors': errors[:20],
     }

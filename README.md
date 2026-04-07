@@ -4,15 +4,25 @@
 
 핵심 구조
 - Main: 엄격 필터. RSI 다이버전스 + Fib 0.618~0.786 + 상승파동 + BTC 시장필터
-- Sub: 완화 필터. 후보군 탐색용
+- Sub: 점수형 후보 생성기
 - 밈코인/저유동성 코인 제외
 - 손절/익절은 퍼센트로 반환
+- 3단계 스캔 구조 적용
+  - 1단계: KRW 유동성 상위 유니버스 선별
+  - 2단계: 1h 경량 스코어링으로 shortlist 압축
+  - 3단계: shortlist만 정밀 분석
 
 ## Endpoints
 - `GET /health`
 - `GET /scan/main`
 - `GET /scan/sub`
 - `GET /scan/single?symbol=BTC&timeframe=1h&mode=main`
+
+## 추천 파라미터
+- Main: `universe_limit=70&shortlist_limit=14`
+- Sub: `universe_limit=70&shortlist_limit=20`
+
+즉, 모수는 넓게 가져가되 정밀 판정 대상만 압축한다.
 
 ## Render
 Build Command
@@ -34,17 +44,8 @@ PYTHON_VERSION=3.11.9
 
 또는 루트 `.python-version` 파일 사용.
 
-
-## v2.1 sub 완화 변경
-- main 로직은 유지
-- sub는 0.5~0.786 완화 피보 구간 허용
-- sub는 다이버전스/3꼭지/wave 중 하나만 성립해도 후보 검토
-- sub는 EMA20 또는 EMA60 위면 추세 조건 통과
-- sub 최소 점수 하향 및 손절 상한 완화
-
-
-## v2.2 sub score mode
-- main 로직은 유지
-- sub는 필터형이 아니라 점수형 후보 생성기로 완화
-- sub 최소 점수 34점
-- sub는 완화 피보/거래량/상승파동/RSI 범위 중 다수 조합으로 후보 출력
+## 환경변수
+- `REQUEST_SLEEP=0.18` 업비트 요청 간 최소 간격
+- `SCAN_UNIVERSE_LIMIT=70`
+- `SCAN_SHORTLIST_LIMIT_MAIN=14`
+- `SCAN_SHORTLIST_LIMIT_SUB=20`

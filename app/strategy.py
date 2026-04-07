@@ -394,5 +394,31 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     )
 
 
+
+def coarse_symbol_score(ohlcv: List[List[float]]) -> int:
+    series = to_series(ohlcv)
+    if len(series.close) < 70:
+        return 0
+    ema20v = ema(series.close, 20)[-1]
+    ema60v = ema(series.close, 60)[-1]
+    rsiv = rsi(series.close, 14)[-1]
+    last = series.close[-1]
+    score = 0
+    if ema20v is not None and last >= float(ema20v):
+        score += 25
+    if ema60v is not None and last >= float(ema60v):
+        score += 20
+    if rsiv is not None and 40 <= float(rsiv) <= 68:
+        score += 25
+    elif rsiv is not None and 34 <= float(rsiv) <= 74:
+        score += 10
+    vol = _volume_ok(series.volume, series.close)
+    if vol.get('volume_ok'):
+        score += 15
+    change = pct_change(series.close[-25], last) if len(series.close) >= 25 else 0.0
+    if -8 <= change <= 18:
+        score += 15
+    return score
+
 def signal_to_dict(signal: Signal) -> Dict[str, object]:
     return asdict(signal)
