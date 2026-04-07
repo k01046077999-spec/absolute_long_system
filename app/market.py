@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from functools import lru_cache
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import ccxt
 
@@ -14,9 +14,28 @@ HARD_BLOCK_BASES = {
     'DOGE', 'SHIB', 'PEPE', 'BONK', 'FLOKI', 'WIF', 'PENGU', 'BOME', '1000PEPE',
     '1000BONK', 'TRUMP', 'MELANIA', 'BRETT', 'MEME', 'TURBO', 'POPCAT'
 }
-REQUEST_SLEEP = float(os.getenv('REQUEST_SLEEP', '0.18'))
+REQUEST_SLEEP = float(os.getenv('REQUEST_SLEEP', '0.28'))
 
 _last_request_ts = 0.0
+
+_OHLCV_CACHE: Dict[Tuple[str, str, int], Tuple[float, List[List[float]]]] = {}
+_OHLCV_CACHE_TTL = float(os.getenv('OHLCV_CACHE_TTL', '25'))
+
+
+def _cache_get(symbol: str, timeframe: str, limit: int):
+    key = (symbol, timeframe, limit)
+    item = _OHLCV_CACHE.get(key)
+    if not item:
+        return None
+    ts, data = item
+    if time.time() - ts > _OHLCV_CACHE_TTL:
+        _OHLCV_CACHE.pop(key, None)
+        return None
+    return data
+
+
+def _cache_set(symbol: str, timeframe: str, limit: int, data: List[List[float]]) -> None:
+    _OHLCV_CACHE[(symbol, timeframe, limit)] = (time.time(), data)
 
 
 def _throttle() -> None:
@@ -115,8 +134,15 @@ def get_symbols(limit: int = 80, quote: str = DEFAULT_QUOTE, min_quote_volume_kr
     return [symbol for symbol, _ in chosen[:limit]]
 
 
-def fetch_ohlcv(symbol: str, timeframe: str = '1h', limit: int = 300) -> List[List[float]]:
+def fetch_ohlcv(symbol: str, timeframe: str = '1h', limit: int = 300, use_cache: bool = True) -> List[List[float]]:
     exchange = get_exchange()
     normalized = normalize_symbol(symbol)
+    if use_cache:
+        cached = _cache_get(normalized, timeframe, limit)
+        if cached is not None:
+            return cached
     _throttle()
-    return exchange.fetch_ohlcv(normalized, timeframe=timeframe, limit=limit)
+    data = exchange.fetch_ohlcv(normalized, timeframe=timeframe, limit=limit)
+    if use_cache:
+        _cache_set(normalized, timeframe, limit, data)
+    return data

@@ -56,3 +56,15 @@ PYTHON_VERSION=3.11.9
 - Sub logic relaxed: score threshold lowered to 14
 - Sub stop anchor uses recent pivot/last 30 bars instead of 120-bar swing low
 - Sub max stop widened to 45%
+
+
+## Stable defaults in this build
+- universe_limit default: 50
+- shortlist_limit main: 12
+- shortlist_limit sub: 15
+- request sleep default: 0.28s
+- OHLCV cache TTL: 25s
+
+For safer operation on Render, first test:
+- /scan/main?universe_limit=40&shortlist_limit=10
+- /scan/sub?universe_limit=40&shortlist_limit=12

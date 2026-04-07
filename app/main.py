@@ -13,12 +13,12 @@ from .strategy import (
     signal_to_dict,
 )
 
-app = FastAPI(title='Presidential Gilsu Long System Upbit', version='2.4.2')
+app = FastAPI(title='Presidential Gilsu Long System Upbit', version='2.5.0')
 
 DEFAULT_TIMEFRAMES = os.getenv('SCAN_TIMEFRAMES', '1h').split(',')
-DEFAULT_UNIVERSE_LIMIT = int(os.getenv('SCAN_UNIVERSE_LIMIT', '70'))
-DEFAULT_SHORTLIST_LIMIT_MAIN = int(os.getenv('SCAN_SHORTLIST_LIMIT_MAIN', '14'))
-DEFAULT_SHORTLIST_LIMIT_SUB = int(os.getenv('SCAN_SHORTLIST_LIMIT_SUB', '20'))
+DEFAULT_UNIVERSE_LIMIT = int(os.getenv('SCAN_UNIVERSE_LIMIT', '50'))
+DEFAULT_SHORTLIST_LIMIT_MAIN = int(os.getenv('SCAN_SHORTLIST_LIMIT_MAIN', '12'))
+DEFAULT_SHORTLIST_LIMIT_SUB = int(os.getenv('SCAN_SHORTLIST_LIMIT_SUB', '15'))
 BTC_BENCHMARK = os.getenv('BTC_BENCHMARK', 'BTC/KRW')
 
 
@@ -35,13 +35,15 @@ def _load_regime() -> dict:
     }
 
 
-def _build_shortlist(symbols: List[str], timeframe: str, shortlist_limit: int) -> Tuple[List[str], List[dict], int]:
+def _build_shortlist(symbols: List[str], timeframe: str, shortlist_limit: int) -> Tuple[List[str], dict, List[dict], int]:
     ranked: List[Tuple[str, int]] = []
+    cached_ohlcv: dict = {}
     errors: List[dict] = []
     coarse_scanned = 0
     for symbol in symbols:
         try:
-            coarse_ohlcv = fetch_ohlcv(symbol, timeframe=timeframe, limit=90)
+            coarse_ohlcv = fetch_ohlcv(symbol, timeframe=timeframe, limit=90, use_cache=True)
+            cached_ohlcv[symbol] = coarse_ohlcv
             score = coarse_symbol_score(coarse_ohlcv)
             coarse_scanned += 1
             ranked.append((symbol, score))
@@ -51,7 +53,7 @@ def _build_shortlist(symbols: List[str], timeframe: str, shortlist_limit: int) -
     shortlist = [symbol for symbol, score in ranked if score >= 20][:shortlist_limit]
     if not shortlist:
         shortlist = [symbol for symbol, _ in ranked[:shortlist_limit]]
-    return shortlist, errors, coarse_scanned
+    return shortlist, cached_ohlcv, errors, coarse_scanned
 
 
 @app.get('/health')
@@ -79,7 +81,7 @@ def scan_main(
     try:
         universe = get_symbols(limit=universe_limit)
         regime = _load_regime()
-        shortlist, errors, coarse_scanned = _build_shortlist(universe, timeframe=primary_tf, shortlist_limit=shortlist_limit)
+        shortlist, cached_ohlcv, errors, coarse_scanned = _build_shortlist(universe, timeframe=primary_tf, shortlist_limit=shortlist_limit)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f'market_load_failed: {exc}') from exc
 
@@ -87,7 +89,12 @@ def scan_main(
     for symbol in shortlist:
         for tf in frames:
             try:
-                ohlcv = fetch_ohlcv(symbol, timeframe=tf, limit=320)
+                if tf == primary_tf and symbol in cached_ohlcv:
+                    ohlcv = cached_ohlcv[symbol]
+                    if len(ohlcv) < 220:
+                        ohlcv = fetch_ohlcv(symbol, timeframe=tf, limit=320, use_cache=True)
+                else:
+                    ohlcv = fetch_ohlcv(symbol, timeframe=tf, limit=320, use_cache=True)
                 signal = analyze_long_signal(symbol, tf, ohlcv, regime['obj'], strict=True)
                 if signal is not None:
                     signals.append(signal_to_dict(signal))
@@ -123,14 +130,17 @@ def scan_sub(
     try:
         universe = get_symbols(limit=universe_limit)
         regime = _load_regime()
-        shortlist, errors, coarse_scanned = _build_shortlist(universe, timeframe=timeframe, shortlist_limit=shortlist_limit)
+        shortlist, cached_ohlcv, errors, coarse_scanned = _build_shortlist(universe, timeframe=timeframe, shortlist_limit=shortlist_limit)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f'market_load_failed: {exc}') from exc
 
     signals: List[dict] = []
     for symbol in shortlist:
         try:
-            ohlcv = fetch_ohlcv(symbol, timeframe=timeframe, limit=320)
+            if symbol in cached_ohlcv and len(cached_ohlcv[symbol]) >= 220:
+                ohlcv = cached_ohlcv[symbol]
+            else:
+                ohlcv = fetch_ohlcv(symbol, timeframe=timeframe, limit=320, use_cache=True)
             signal = analyze_long_signal(symbol, timeframe, ohlcv, regime['obj'], strict=False)
             if signal is not None:
                 signals.append(signal_to_dict(signal))
