@@ -120,13 +120,15 @@ def _fib_zone(closes: List[float], highs: List[float], lows: List[float], lookba
     swing_low = min(lows[start:end])
     swing_high = max(highs[start:end])
     if swing_high <= swing_low:
-        return {"in_fib_buy_zone": False}
+        return {"in_fib_buy_zone": False, "in_relaxed_fib_buy_zone": False}
     diff = swing_high - swing_low
     fib_618 = swing_high - diff * 0.618
     fib_786 = swing_high - diff * 0.786
     fib_1 = swing_low
     price = closes[-1]
+    fib_5 = swing_high - diff * 0.5
     in_zone = fib_786 <= price <= fib_618
+    in_relaxed_zone = fib_786 <= price <= fib_5
     invalidated = price < fib_1
     return {
         "swing_low": swing_low,
@@ -134,7 +136,9 @@ def _fib_zone(closes: List[float], highs: List[float], lows: List[float], lookba
         "fib_618": fib_618,
         "fib_786": fib_786,
         "fib_1": fib_1,
+        "fib_5": fib_5,
         "in_fib_buy_zone": in_zone,
+        "in_relaxed_fib_buy_zone": in_relaxed_zone,
         "fib_invalidated": invalidated,
     }
 
@@ -247,48 +251,80 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     score = 0
     reasons: List[str] = []
 
-    if bull_div:
-        score += 30
-        reasons.append('강세 RSI 다이버전스 확인')
-    if div_meta.get('three_pivot_linked'):
-        score += 20
-        reasons.append('3꼭지 다이버전스 연계 확인')
-    if fib_meta.get('in_fib_buy_zone'):
-        score += 20
-        reasons.append('가격이 0.618~0.786 되돌림 구간')
-    elif not strict and fib_meta.get('in_relaxed_fib_buy_zone'):
-        score += 12
-        reasons.append('가격이 0.5~0.786 완화 되돌림 구간')
-    if wave_ok and wave_meta.get('break_high_target'):
-        score += 15
-        reasons.append('상승 파동 higher low + 전고점 회복 시도')
-    if vol_meta.get('volume_ok'):
-        score += 10
-        reasons.append('최근 거래량 평균이 20봉 대비 증가')
-    if above_ema20:
-        score += 5
-        reasons.append('종가가 EMA20 위')
-    if above_ema60:
-        score += 5
-        reasons.append('종가가 EMA60 위')
-    if above_ema200:
-        score += 5
-        reasons.append('가격이 EMA200 대비 과도한 하락 아님')
-    if current_rsi is not None and 28 <= current_rsi <= 48:
-        score += 10
-        reasons.append('RSI 위치가 롱 진입 부담이 과하지 않음')
-    elif not strict and current_rsi is not None and 30 <= current_rsi <= 58:
-        score += 6
-        reasons.append('RSI 위치가 서브 후보 범위 안')
+    if strict:
+        if bull_div:
+            score += 30
+            reasons.append('강세 RSI 다이버전스 확인')
+        if div_meta.get('three_pivot_linked'):
+            score += 20
+            reasons.append('3꼭지 다이버전스 연계 확인')
+        if fib_meta.get('in_fib_buy_zone'):
+            score += 20
+            reasons.append('가격이 0.618~0.786 되돌림 구간')
+        if wave_ok and wave_meta.get('break_high_target'):
+            score += 15
+            reasons.append('상승 파동 higher low + 전고점 회복 시도')
+        if vol_meta.get('volume_ok'):
+            score += 10
+            reasons.append('최근 거래량 평균이 20봉 대비 증가')
+        if above_ema20:
+            score += 5
+            reasons.append('종가가 EMA20 위')
+        if above_ema60:
+            score += 5
+            reasons.append('종가가 EMA60 위')
+        if above_ema200:
+            score += 5
+            reasons.append('가격이 EMA200 대비 과도한 하락 아님')
+        if current_rsi is not None and 28 <= current_rsi <= 48:
+            score += 10
+            reasons.append('RSI 위치가 롱 진입 부담이 과하지 않음')
+    else:
+        if bull_div:
+            score += 25
+            reasons.append('강세 RSI 다이버전스 후보')
+        if div_meta.get('three_pivot_linked'):
+            score += 18
+            reasons.append('3꼭지 다이버전스 연계 후보')
+        if fib_meta.get('in_fib_buy_zone'):
+            score += 18
+            reasons.append('가격이 핵심 피보 되돌림 구간')
+        elif fib_meta.get('in_relaxed_fib_buy_zone'):
+            score += 14
+            reasons.append('가격이 완화 피보 되돌림 구간')
+        if wave_ok:
+            score += 12
+            reasons.append('상승 파동 higher low 구조')
+        if wave_meta.get('break_high_target'):
+            score += 8
+            reasons.append('전고점 회복 시도')
+        if vol_meta.get('volume_ok'):
+            score += 12
+            reasons.append('거래량 증가 확인')
+        if above_ema20:
+            score += 10
+            reasons.append('종가가 EMA20 위')
+        elif above_ema60:
+            score += 8
+            reasons.append('종가가 EMA60 위')
+        if above_ema200:
+            score += 6
+            reasons.append('EMA200 대비 과도한 침체 아님')
+        if current_rsi is not None and 32 <= current_rsi <= 62:
+            score += 10
+            reasons.append('RSI가 서브 후보 범위')
+        elif current_rsi is not None and 25 <= current_rsi <= 68:
+            score += 6
+            reasons.append('RSI가 확장 후보 범위')
 
     hard_fail = False
     if strict and not regime.allowed:
         hard_fail = True
     if fib_meta.get('fib_invalidated'):
         hard_fail = True
-    if ext_meta.get('overextended'):
-        hard_fail = True
     if not not_far_above_ema200:
+        hard_fail = True
+    if strict and ext_meta.get('overextended'):
         hard_fail = True
     if strict and not fib_meta.get('in_fib_buy_zone'):
         hard_fail = True
@@ -301,11 +337,14 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
         bull_div or
         div_meta.get('three_pivot_linked') or
         wave_ok or
-        fib_meta.get('in_relaxed_fib_buy_zone')
+        fib_meta.get('in_relaxed_fib_buy_zone') or
+        vol_meta.get('volume_ok')
     )
-    sub_trend_ok = bool(above_ema20 or above_ema60)
+    sub_trend_ok = bool(above_ema20 or above_ema60 or (current_rsi is not None and current_rsi >= 38))
 
-    min_score = 85 if strict else 52
+    min_score = 85 if strict else 34
+    if not strict and not regime.allowed:
+        return None
     if not strict and not sub_structure_ok:
         return None
     if not strict and not sub_trend_ok:
@@ -317,7 +356,7 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     stop_loss_pct = abs(pct_change(price, swing_low))
     if strict and (stop_loss_pct < 2.5 or stop_loss_pct > 8.5):
         return None
-    if not strict and stop_loss_pct > 12.5:
+    if not strict and stop_loss_pct > 16.0:
         return None
     if stop_loss_pct < 2.5:
         stop_loss_pct = 2.5

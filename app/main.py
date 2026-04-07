@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
 from .market import DEFAULT_EXCHANGE, DEFAULT_QUOTE, fetch_ohlcv, get_symbols, normalize_symbol
 from .strategy import analyze_long_signal, evaluate_market_regime, signal_to_dict
 
-app = FastAPI(title='Presidential Gilsu Long System Upbit', version='2.0.0')
+app = FastAPI(title='Presidential Gilsu Long System Upbit', version='2.2.0')
 
 DEFAULT_TIMEFRAMES = os.getenv('SCAN_TIMEFRAMES', '1h').split(',')
 DEFAULT_SYMBOL_LIMIT = int(os.getenv('SCAN_SYMBOL_LIMIT', '40'))
