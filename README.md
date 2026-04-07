@@ -49,3 +49,8 @@ PYTHON_VERSION=3.11.9
 - `SCAN_UNIVERSE_LIMIT=70`
 - `SCAN_SHORTLIST_LIMIT_MAIN=14`
 - `SCAN_SHORTLIST_LIMIT_SUB=20`
+
+
+## v2.4.1 note
+- Main logic preserved from the prior complete strict version.
+- Only Sub mode was relaxed into a scored candidate generator.

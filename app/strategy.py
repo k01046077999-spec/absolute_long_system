@@ -320,9 +320,9 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     hard_fail = False
     if strict and not regime.allowed:
         hard_fail = True
-    if fib_meta.get('fib_invalidated'):
+    if strict and fib_meta.get('fib_invalidated'):
         hard_fail = True
-    if not not_far_above_ema200:
+    if strict and not not_far_above_ema200:
         hard_fail = True
     if strict and ext_meta.get('overextended'):
         hard_fail = True
@@ -342,17 +342,19 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
     )
     sub_trend_ok = bool(above_ema20 or above_ema60 or (current_rsi is not None and current_rsi >= 38))
 
-    min_score = 85 if strict else 28
+    min_score = 85 if strict else 24
     if not strict and not regime.allowed:
         return None
-    if hard_fail or score < min_score:
+    if strict and (hard_fail or score < min_score):
+        return None
+    if not strict and score < min_score:
         return None
 
-    swing_low = float(fib_meta['fib_1'])
+    swing_low = float(fib_meta['fib_1']) if fib_meta.get('fib_1') is not None else min(series.low[-20:])
     stop_loss_pct = abs(pct_change(price, swing_low))
     if strict and (stop_loss_pct < 2.5 or stop_loss_pct > 8.5):
         return None
-    if not strict and stop_loss_pct > 22.0:
+    if not strict and stop_loss_pct > 30.0:
         return None
     if stop_loss_pct < 2.5:
         stop_loss_pct = 2.5
@@ -388,7 +390,7 @@ def analyze_long_signal(symbol: str, timeframe: str, ohlcv: List[List[float]], r
         take_profit_2_pct=take_profit_2_pct,
         score=score,
         regime_score=regime.score,
-        signal_name='presidential_gilsu_long_main' if strict else 'presidential_gilsu_long_sub',
+        signal_name='presidential_gilsu_long_main' if strict else 'presidential_gilsu_long_sub_scored',
         reasons=reasons + ([f'BTC 시장 필터 통과({regime.score})'] if regime.allowed else []),
         meta=meta,
     )
