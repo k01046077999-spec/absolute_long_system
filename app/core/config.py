@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
 
     app_name: str = '완전무결매매법 코인 검색기'
-    app_version: str = '2.2.0-upbit-long'
+    app_version: str = '2.2.1-upbit-long-render-safe'
     upbit_base_url: str = 'https://api.upbit.com'
 
     rsi_period: int = 14

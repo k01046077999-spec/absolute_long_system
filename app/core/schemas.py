@@ -48,6 +48,7 @@ class ScanResponse(BaseModel):
     elapsed_seconds: float
     top_picks: list[ScanSignal]
     signals: list[ScanSignal]
+    warnings: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

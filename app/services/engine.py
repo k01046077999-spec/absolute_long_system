@@ -206,9 +206,29 @@ class ScannerEngine:
     async def scan(self, mode: str) -> ScanResponse:
         started = perf_counter()
         limit = settings.scan_market_limit_main if mode == 'main' else settings.scan_market_limit_sub
-        markets = await self.client.top_markets(limit, mode=mode)
-        tasks = [self.analyze_symbol(market, mode) for market in markets]
-        analyzed = [x for x in await asyncio.gather(*tasks) if x is not None]
+        warnings: list[str] = []
+
+        try:
+            markets = await self.client.top_markets(limit, mode=mode)
+        except Exception as exc:
+            warnings.append(f'upbit_market_fetch_failed:{exc.__class__.__name__}')
+            return ScanResponse(
+                mode=mode,
+                scanned_symbols=0,
+                matched_symbols=0,
+                elapsed_seconds=round(perf_counter() - started, 2),
+                top_picks=[],
+                signals=[],
+                warnings=warnings,
+            )
+
+        try:
+            tasks = [self.analyze_symbol(market, mode) for market in markets]
+            analyzed = [x for x in await asyncio.gather(*tasks) if x is not None]
+        except Exception as exc:
+            warnings.append(f'analysis_failed:{exc.__class__.__name__}')
+            analyzed = []
+
         analyzed.sort(key=lambda x: (x.filters_passed, x.score, x.risk.rr_tp2), reverse=True)
         passed = [x for x in analyzed if x.filters_passed]
         if mode == 'main':
@@ -222,4 +242,5 @@ class ScannerEngine:
             elapsed_seconds=round(perf_counter() - started, 2),
             top_picks=top_picks,
             signals=analyzed[: max(settings.top_pick_count, 20)],
+            warnings=warnings,
         )
