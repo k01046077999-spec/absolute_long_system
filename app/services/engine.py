@@ -40,9 +40,10 @@ class ScannerEngine:
         recent_high = float(df['high'].tail(50).max())
         return round((recent_high / current - 1.0) * 100.0, 2)
 
-    def _overheated(self, df) -> bool:
+    def _overheated(self, df, mode: str) -> bool:
         val = float(df['pct_from_20_low'].iloc[-1])
-        return val >= settings.hot_move_exclude_pct
+        threshold = settings.hot_move_exclude_pct_main if mode == 'main' else settings.hot_move_exclude_pct_sub
+        return val >= threshold
 
     def _risk(self, current: float, fib: dict, room_pct: float) -> RiskPlan:
         invalidation = float(fib['fib_1'])
@@ -77,22 +78,37 @@ class ScannerEngine:
 
         if mode == 'main' and div_kind != 'chain':
             rejected.append('main_requires_chain_divergence')
-        if zone == 'out_zone' and mode == 'main':
+        if mode == 'main' and zone == 'out_zone':
             rejected.append('fib_zone_miss')
-        if current > upper * (1 + settings.late_entry_buffer_pct / 100.0):
+        if mode == 'sub' and zone == 'out_zone':
+            rejected.append('fib_zone_far')
+
+        late_entry_buffer = settings.late_entry_buffer_pct_main if mode == 'main' else settings.late_entry_buffer_pct_sub
+        if current > upper * (1 + late_entry_buffer / 100.0):
             rejected.append('late_long_entry')
-        if volume_ratio < settings.min_volume_ratio:
+
+        min_volume_ratio = settings.min_volume_ratio_main if mode == 'main' else settings.min_volume_ratio_sub
+        if volume_ratio < min_volume_ratio:
             rejected.append('weak_volume')
+
         if overheated:
             rejected.append('overheated_after_rally')
-        if room_pct < settings.resistance_min_room_pct:
+
+        min_room = settings.resistance_min_room_pct_main if mode == 'main' else settings.resistance_min_room_pct_sub
+        if room_pct < min_room:
             rejected.append('too_close_to_resistance')
+
         min_rr = settings.min_rr_main if mode == 'main' else settings.min_rr_sub
         if risk.rr_tp2 < min_rr:
             rejected.append('rr_too_low')
         if risk.stop_loss_pct >= 0:
             rejected.append('invalid_stop_structure')
         return len(rejected) == 0, rejected
+
+    def _state_for_mode(self, mode: str, passed: bool) -> str:
+        if passed:
+            return 'candidate'
+        return 'watch' if mode == 'sub' else 'rejected'
 
     async def analyze_symbol(self, symbol: str, mode: str) -> ScanSignal | None:
         try:
@@ -118,31 +134,38 @@ class ScannerEngine:
             if 22 <= rsi1h <= 45:
                 long_score += 8
 
-            if long_score == 0:
+            if mode == 'main' and not bull1h['found']:
+                return None
+            if mode == 'sub' and not (bull1h['found'] or bull15m['found'] or bull4h['found']):
                 return None
 
-            div = bull1h
+            div = bull1h if bull1h['found'] else (bull15m if bull15m['found'] else bull4h)
             fib = bullish_fib(df1h)
-            zone = zone_status(current, fib['fib_0618'], fib['fib_0786'], settings.fib_tolerance_pct)
+            fib_tolerance = settings.fib_tolerance_pct_main if mode == 'main' else settings.fib_tolerance_pct_sub
+            zone = zone_status(current, fib['fib_0618'], fib['fib_0786'], fib_tolerance)
             if zone == 'in_zone':
                 long_score += 16
             elif zone == 'near_zone':
                 long_score += 8
+            elif mode == 'sub':
+                long_score += 2
 
             volume_ratio = self._volume_ratio(df1h)
             if volume_ratio >= 1.25:
                 long_score += 8
             elif volume_ratio >= 1.05:
                 long_score += 4
+            elif mode == 'sub' and volume_ratio >= 0.92:
+                long_score += 2
 
             room_pct = self._resistance_room(df1h)
-            overheated = self._overheated(df1h)
+            overheated = self._overheated(df1h, mode)
             risk = self._risk(current, fib, room_pct)
             passed, rejected = self._passes_filters(mode, current, fib, zone, volume_ratio, overheated, room_pct, risk, div['kind'])
             grade = compute_grade(long_score)
 
             reasons = [
-                f'1h 상승 다이버전스 {div["kind"]}',
+                f'1h 상승 다이버전스 {bull1h["kind"] if bull1h["found"] else "none"}',
                 f'피보나치 {zone}',
                 f'거래량비 {volume_ratio}',
                 f'손절 {risk.stop_loss_pct}%',
@@ -154,6 +177,8 @@ class ScannerEngine:
                 reasons.append('15분 보조확인')
             if bull4h['found']:
                 reasons.append('4시간 방향보조')
+            if mode == 'sub' and rejected:
+                reasons.append('서브 탐색후보')
 
             return ScanSignal(
                 symbol=symbol,
@@ -161,7 +186,7 @@ class ScannerEngine:
                 side='bullish',
                 score=round(long_score, 2),
                 grade=grade,
-                state='candidate' if passed else 'watch',
+                state=self._state_for_mode(mode, passed),
                 current_price=round(current, 8),
                 reason_summary=' | '.join(reasons),
                 divergence_kind=div['kind'],
@@ -181,12 +206,15 @@ class ScannerEngine:
     async def scan(self, mode: str) -> ScanResponse:
         started = perf_counter()
         limit = settings.scan_market_limit_main if mode == 'main' else settings.scan_market_limit_sub
-        markets = await self.client.top_markets(limit)
+        markets = await self.client.top_markets(limit, mode=mode)
         tasks = [self.analyze_symbol(market, mode) for market in markets]
         analyzed = [x for x in await asyncio.gather(*tasks) if x is not None]
         analyzed.sort(key=lambda x: (x.filters_passed, x.score, x.risk.rr_tp2), reverse=True)
         passed = [x for x in analyzed if x.filters_passed]
-        top_picks = passed[:settings.top_pick_count]
+        if mode == 'main':
+            top_picks = passed[:settings.top_pick_count]
+        else:
+            top_picks = (passed[:settings.top_pick_count] or analyzed[:settings.top_pick_count])
         return ScanResponse(
             mode=mode,
             scanned_symbols=len(markets),

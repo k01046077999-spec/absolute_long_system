@@ -56,20 +56,21 @@ class UpbitClient:
         df['close_time'] = df['open_time']
         return df[['open_time', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_volume']].dropna().reset_index(drop=True)
 
-    async def top_markets(self, limit: int) -> list[str]:
+    async def top_markets(self, limit: int, mode: str = 'main') -> list[str]:
         market_rows = await self.markets()
         krw_markets = [x['market'] for x in market_rows if str(x.get('market', '')).startswith('KRW-')]
         excluded = {x.strip().upper() for x in settings.exclude_markets.split(',') if x.strip()}
         krw_markets = [m for m in krw_markets if m.upper() not in excluded]
         tickers = await self.tickers(krw_markets)
         ranked: list[tuple[str, float]] = []
+        min_trade_price = settings.min_daily_acc_trade_price_krw_main if mode == 'main' else settings.min_daily_acc_trade_price_krw_sub
         for t in tickers:
             market = str(t.get('market', ''))
             acc_trade_price = float(t.get('acc_trade_price_24h') or 0.0)
             trade_price = float(t.get('trade_price') or 0.0)
             if not market.startswith('KRW-') or trade_price <= 0:
                 continue
-            if acc_trade_price < settings.min_daily_acc_trade_price_krw:
+            if acc_trade_price < min_trade_price:
                 continue
             ranked.append((market, acc_trade_price))
         ranked.sort(key=lambda x: x[1], reverse=True)

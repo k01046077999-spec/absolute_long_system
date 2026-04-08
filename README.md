@@ -12,16 +12,9 @@
 - 과도한 추격, 거래량 부족, 저항 근접, RR 부족은 제외
 - 손절/익절은 **가격 + 퍼센트** 둘 다 반환
 
-## 엔드포인트
-- `GET /health`
-- `GET /scan/main`
-- `GET /scan/sub`
-- `GET /analyze/{symbol}`
-- `GET /openapi.json`
-
 ## main / sub 차이
 - `main`: 1시간봉 **연계 다이버전스(chain)** 필수 + 피보나치 구간 + 실전 필터 강하게 적용
-- `sub`: 일반 상승 다이버전스도 허용, 탐색 후보용
+- `sub`: 일반 상승 다이버전스 허용 + 거래대금/거래량/피보나치/저항 여유 기준 완화 + 후보가 없으면 watch 상태 탐색 후보까지 노출
 
 ## 응답에서 바로 볼 포인트
 - `risk.stop_loss_pct` → 손절 퍼센트
@@ -29,34 +22,17 @@
 - `risk.tp2_pct` → 2차 익절 퍼센트
 - `reason_summary` 안에도 `%` 표기로 같이 노출
 
-## 심화 검토 포인트
-- 업비트는 USDT 마켓보다 유동성 구조가 달라서 **KRW 24시간 거래대금 하한**을 둠
-- 롱만 남기기 위해 하락 다이버전스/숏 로직은 제거
-- `main_requires_chain_divergence`로 메인은 PDF 핵심인 **연계형 구조**를 강제
-- `invalid_stop_structure`를 넣어 손절 구조가 비정상인 후보를 제거
-
-## 로컬 실행
-```bash
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-## Render 배포
-- 새 Web Service 생성
-- 이 프로젝트 업로드
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+## 서브 개편 핵심
+- 서브는 이제 **신호기**가 아니라 **레이더** 역할
+- `matched_symbols`는 여전히 실전 필터 통과 건수
+- 다만 `top_picks`는 통과 종목이 없으면 점수 높은 `watch` 후보를 대신 보여줌
+- 즉, 메인은 엄격 유지, 서브는 관찰 후보를 뱉도록 구조를 분리함
 
 ## Render env 예시
 - `UPBIT_BASE_URL=https://api.upbit.com`
 - `SCAN_MARKET_LIMIT_MAIN=60`
-- `SCAN_MARKET_LIMIT_SUB=120`
+- `SCAN_MARKET_LIMIT_SUB=140`
 - `TOP_PICK_COUNT=8`
 
-## analyze 예시
-- `/analyze/BTC`
-- `/analyze/KRW-BTC`
-- `/analyze/XRP?mode=sub`
-
 ## 주의
-이 스캐너는 **신호 생성기**다. 승률을 높이는 구조물이지, 수익 보장기는 아니다.
+이 스캐너는 **신호 생성기**다. 수익 보장기가 아니다.
