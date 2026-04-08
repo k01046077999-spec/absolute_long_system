@@ -1,19 +1,16 @@
 services:
   - type: web
-    name: presidential-gilsu-long-upbit
-    env: python
+    name: perfect-coin-scanner-upbit-long
+    runtime: python
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: EXCHANGE_ID
-        value: upbit
-      - key: QUOTE
-        value: KRW
-      - key: SCAN_TIMEFRAMES
-        value: 1h
-      - key: SCAN_SYMBOL_LIMIT
-        value: 40
-      - key: BTC_BENCHMARK
-        value: BTC/KRW
-      - key: PYTHON_VERSION
-        value: 3.11.9
+      - key: UPBIT_BASE_URL
+        value: https://api.upbit.com
+      - key: SCAN_MARKET_LIMIT_MAIN
+        value: "60"
+      - key: SCAN_MARKET_LIMIT_SUB
+        value: "120"
+      - key: TOP_PICK_COUNT
+        value: "8"

@@ -1,70 +1,62 @@
-# Presidential Gilsu Long System Upbit
+# 완전무결매매법 코인 검색기 (업비트 KRW / 롱 전용)
 
-업비트 KRW 현물 전용 롱 스캐너다.
+이번 최종본은 **업비트 기준**, **롱 포지션만 탐색**하도록 다시 정리한 FastAPI 스캐너입니다.
 
-핵심 구조
-- Main: 엄격 필터. RSI 다이버전스 + Fib 0.618~0.786 + 상승파동 + BTC 시장필터
-- Sub: 점수형 후보 생성기
-- 밈코인/저유동성 코인 제외
-- 손절/익절은 퍼센트로 반환
-- 3단계 스캔 구조 적용
-  - 1단계: KRW 유동성 상위 유니버스 선별
-  - 2단계: 1h 경량 스코어링으로 shortlist 압축
-  - 3단계: shortlist만 정밀 분석
+## 핵심 해석 원칙
+- 업비트 **KRW 마켓**만 스캔
+- **롱 포지션만** 탐색
+- 1시간봉 중심
+- RSI 일반 다이버전스보다 **3개 이상 pivot 연계**를 main에서 우선
+- 피보나치 **0.618 ~ 0.786** 구간을 핵심 되돌림 구간으로 사용
+- **피보나치 1 이탈은 구조 무효**
+- 과도한 추격, 거래량 부족, 저항 근접, RR 부족은 제외
+- 손절/익절은 **가격 + 퍼센트** 둘 다 반환
 
-## Endpoints
+## 엔드포인트
 - `GET /health`
 - `GET /scan/main`
 - `GET /scan/sub`
-- `GET /scan/single?symbol=BTC&timeframe=1h&mode=main`
+- `GET /analyze/{symbol}`
+- `GET /openapi.json`
 
-## 추천 파라미터
-- Main: `universe_limit=70&shortlist_limit=14`
-- Sub: `universe_limit=70&shortlist_limit=20`
+## main / sub 차이
+- `main`: 1시간봉 **연계 다이버전스(chain)** 필수 + 피보나치 구간 + 실전 필터 강하게 적용
+- `sub`: 일반 상승 다이버전스도 허용, 탐색 후보용
 
-즉, 모수는 넓게 가져가되 정밀 판정 대상만 압축한다.
+## 응답에서 바로 볼 포인트
+- `risk.stop_loss_pct` → 손절 퍼센트
+- `risk.tp1_pct` → 1차 익절 퍼센트
+- `risk.tp2_pct` → 2차 익절 퍼센트
+- `reason_summary` 안에도 `%` 표기로 같이 노출
 
-## Render
-Build Command
+## 심화 검토 포인트
+- 업비트는 USDT 마켓보다 유동성 구조가 달라서 **KRW 24시간 거래대금 하한**을 둠
+- 롱만 남기기 위해 하락 다이버전스/숏 로직은 제거
+- `main_requires_chain_divergence`로 메인은 PDF 핵심인 **연계형 구조**를 강제
+- `invalid_stop_structure`를 넣어 손절 구조가 비정상인 후보를 제거
+
+## 로컬 실행
 ```bash
 pip install -r requirements.txt
+uvicorn app.main:app --reload
 ```
 
-Start Command
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
+## Render 배포
+- 새 Web Service 생성
+- 이 프로젝트 업로드
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
-## Python version on Render
-환경변수에 아래 값을 추가하는 것을 권장한다.
+## Render env 예시
+- `UPBIT_BASE_URL=https://api.upbit.com`
+- `SCAN_MARKET_LIMIT_MAIN=60`
+- `SCAN_MARKET_LIMIT_SUB=120`
+- `TOP_PICK_COUNT=8`
 
-```txt
-PYTHON_VERSION=3.11.9
-```
+## analyze 예시
+- `/analyze/BTC`
+- `/analyze/KRW-BTC`
+- `/analyze/XRP?mode=sub`
 
-또는 루트 `.python-version` 파일 사용.
-
-## 환경변수
-- `REQUEST_SLEEP=0.18` 업비트 요청 간 최소 간격
-- `SCAN_UNIVERSE_LIMIT=70`
-- `SCAN_SHORTLIST_LIMIT_MAIN=14`
-- `SCAN_SHORTLIST_LIMIT_SUB=20`
-
-
-## v2.4.2 final
-- Main logic preserved
-- Sub logic relaxed: score threshold lowered to 14
-- Sub stop anchor uses recent pivot/last 30 bars instead of 120-bar swing low
-- Sub max stop widened to 45%
-
-
-## Stable defaults in this build
-- universe_limit default: 50
-- shortlist_limit main: 12
-- shortlist_limit sub: 15
-- request sleep default: 0.28s
-- OHLCV cache TTL: 25s
-
-For safer operation on Render, first test:
-- /scan/main?universe_limit=40&shortlist_limit=10
-- /scan/sub?universe_limit=40&shortlist_limit=12
+## 주의
+이 스캐너는 **신호 생성기**다. 승률을 높이는 구조물이지, 수익 보장기는 아니다.
