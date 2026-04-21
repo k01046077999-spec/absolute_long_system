@@ -1,16 +1,13 @@
 services:
   - type: web
-    name: perfect-coin-scanner-upbit-long
-    runtime: python
-    plan: starter
+    name: jade-coin-scanner
+    env: python
+    region: singapore
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: UPBIT_BASE_URL
-        value: https://api.upbit.com
-      - key: SCAN_MARKET_LIMIT_MAIN
-        value: "60"
-      - key: SCAN_MARKET_LIMIT_SUB
-        value: "120"
-      - key: TOP_PICK_COUNT
-        value: "8"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    healthCheckPath: /health
+    autoDeploy: true

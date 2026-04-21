@@ -1,43 +1,196 @@
-# 완전무결매매법 코인 검색기 (업비트 KRW / 롱 전용)
+# 📊 제이드 코인 스캐너 v1.0.0
 
-이번 최종본은 **업비트 기준**, **롱 포지션만 탐색**하도록 다시 정리한 FastAPI 스캐너입니다.
+> **업비트 KRW 마켓 전용** — 제이드 파동 심화 이론 기반 RSI 다이버전스 연계 + Fibonacci 스캐너
 
-## 핵심 해석 원칙
-- 업비트 **KRW 마켓**만 스캔
-- **롱 포지션만** 탐색
-- 1시간봉 중심
-- RSI 일반 다이버전스보다 **3개 이상 pivot 연계**를 main에서 우선
-- 피보나치 **0.618 ~ 0.786** 구간을 핵심 되돌림 구간으로 사용
-- **피보나치 1 이탈은 구조 무효**
-- 과도한 추격, 거래량 부족, 저항 근접, RR 부족은 제외
-- 손절/익절은 **가격 + 퍼센트** 둘 다 반환
+---
 
-## main / sub 차이
-- `main`: 1시간봉 **연계 다이버전스(chain)** 필수 + 피보나치 구간 + 실전 필터 강하게 적용
-- `sub`: 일반 상승 다이버전스 허용 + 거래대금/거래량/피보나치/저항 여유 기준 완화 + 후보가 없으면 watch 상태 탐색 후보까지 노출
+## 🎯 핵심 분석 이론 (PDF 기반)
 
-## 응답에서 바로 볼 포인트
-- `risk.stop_loss_pct` → 손절 퍼센트
-- `risk.tp1_pct` → 1차 익절 퍼센트
-- `risk.tp2_pct` → 2차 익절 퍼센트
-- `reason_summary` 안에도 `%` 표기로 같이 노출
+### 파동의 정의
+| 파동 | 특징 | 목적 |
+|------|------|------|
+| 상승 파동 | 전저점 미이탈, 저점 상승 | 전고점 돌파 |
+| 하락 파동 | 전고점 미갱신, 고점 하락 | 전저점 갱신 |
+| 잔 파동 | 횡보 (박스권) | 방향 전환 준비 |
 
-## 서브 개편 핵심
-- 서브는 이제 **신호기**가 아니라 **레이더** 역할
-- `matched_symbols`는 여전히 실전 필터 통과 건수
-- 다만 `top_picks`는 통과 종목이 없으면 점수 높은 `watch` 후보를 대신 보여줌
-- 즉, 메인은 엄격 유지, 서브는 관찰 후보를 뱉도록 구조를 분리함
+### RSI 다이버전스 연계 (핵심)
+```
+상승 다이버전스: 지수 저점 하락 + RSI 저점 상승 → 롱 신호
+하락 다이버전스: 지수 고점 상승 + RSI 고점 하락 → 숏 신호
+```
 
-## Render env 예시
-- `UPBIT_BASE_URL=https://api.upbit.com`
-- `SCAN_MARKET_LIMIT_MAIN=60`
-- `SCAN_MARKET_LIMIT_SUB=140`
-- `TOP_PICK_COUNT=8`
+**중요**: RSI가 과매도/과매수 구간을 **"쾅" 하며 돌파**하는 시점에서만 유효  
+(점선 = 70/30 기준선, 중간 구간 다이버전스는 확률 낮음)
 
-## 주의
-이 스캐너는 **신호 생성기**다. 수익 보장기가 아니다.
+**3점 연계 = 최강 신호** (PDF 강조)
 
+### 피보나치 되돌림
+```
+진입 대기: 0.618 ~ 0.786 구간
+손절 라인: 피보나치 1 (절대 방어선, 이탈 시 더 큰 파동 고려)
+TP1:       1.272 연장선
+TP2:       1.618 연장선
+```
 
-## Render 배포 안정화
-- 이번 패키지는 **압축 해제 후 바로 루트가 되는 형태**로 다시 묶어 배포하는 것을 권장
-- 업비트 API 응답 실패나 일시적 DNS 문제 발생 시, 서버가 502로 죽기보다 빈 결과 + warnings 로 반환하도록 보강
+### 매매 원칙
+1. **근거 있는 자리만 진입** (다이버전스 연계 + 피보나치 구간)
+2. **역지정(손절) 없는 매매 금지** → 피보나치 1 자리
+3. **분할 매수** 습관화
+4. 애매할 때 → 주기 한 단계 축소 (1h → 30m)
+5. 피보나치 1 이탈 시 → 더 큰 파동으로 재계산
+
+---
+
+## 🚀 빠른 시작
+
+### 로컬 실행
+```bash
+# 1. 의존성 설치
+pip install -r requirements.txt
+
+# 2. 서버 시작
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 3. 브라우저에서 확인
+open http://localhost:8000
+```
+
+### Docker 실행
+```bash
+docker build -t jade-scanner .
+docker run -p 8000:8000 jade-scanner
+```
+
+---
+
+## 📡 API 엔드포인트
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/` | 대시보드 (HTML) |
+| GET | `/health` | 서비스 상태 |
+| GET | `/scan/main` | 메인 스캔 (엄격한 기준) |
+| GET | `/scan/main/top` | 메인 Top Picks |
+| GET | `/scan/sub` | 서브 스캔 (유연한 기준) |
+| GET | `/scan/sub/top` | 서브 Top Picks |
+| GET | `/scan/symbol/{symbol}` | 단일 종목 분석 |
+| GET | `/docs` | Swagger UI |
+
+### 쿼리 파라미터
+```
+/scan/main?symbols=KRW-BTC,KRW-ETH,KRW-XRP
+/scan/symbol/KRW-BTC?mode=sub
+```
+
+---
+
+## 🏗️ 분석 파이프라인
+
+```
+1. Universe 수집    : 업비트 KRW 상위 거래량 120개
+        ↓
+2. Prefilter        : 1h RSI 다이버전스 빠른 점수 → 상위 60개
+        ↓
+3. Quick Gate       : bull_rank 기준 Full 분석 대상 선별
+        ↓
+4. Full Analysis    : 1h + 30m + 4h 다이버전스 + Fib + 진입 확인
+        ↓
+5. Practical Filter : RR / TP% / SL% 실전 기준 적용
+        ↓
+6. Top Picks        : 최종 상위 랭킹 (최대 5개)
+```
+
+### 스코어링 기준
+| 조건 | 점수 |
+|------|------|
+| 1h 다이버전스 연계 (3점) | +34~52 |
+| 30m 다이버전스 연계 | +14 |
+| 4h 방향 확인 | +10 |
+| Fib 0.618~0.786 진입 구간 | +18 |
+| Fib 핵심 구간 인접 | +9~14 |
+| RSI 극단 구간 | +8~12 |
+| 거래량 증가 | +8 |
+| 목표 방향 공간 | +5 |
+
+---
+
+## ⚙️ 실전 필터 기준
+
+### Main 스캔
+| 지표 | 기준 |
+|------|------|
+| R:R (TP2) | ≥ 2.0 |
+| SL 폭 | ≥ 1.2% |
+| TP1 | ≥ 3.0% |
+| TP2 | ≥ 5.0% |
+
+### Sub 스캔
+| 지표 | 기준 |
+|------|------|
+| R:R (TP2) | ≥ 1.8 |
+| SL 폭 | ≥ 1.0% |
+| TP1 | ≥ 2.4% |
+| TP2 | ≥ 4.5% |
+
+---
+
+## 🌐 Render 배포
+
+### 1. GitHub에 올리기
+```bash
+git init
+git add .
+git commit -m "feat: jade scanner v1.0.0"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/jade-scanner.git
+git push -u origin main
+```
+
+### 2. Render 설정
+1. [render.com](https://render.com) → New Web Service
+2. GitHub 저장소 연결
+3. 설정:
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - **Region**: Singapore (업비트 API 레이턴시 최적)
+4. Deploy
+
+---
+
+## 📁 프로젝트 구조
+
+```
+jade_scanner_v1/
+├── app/
+│   ├── __init__.py
+│   ├── main.py          # FastAPI 앱 + 대시보드
+│   ├── config.py        # 설정값
+│   ├── models.py        # Pydantic 모델
+│   └── services/
+│       ├── __init__.py
+│       ├── upbit_client.py   # 업비트 API 클라이언트
+│       ├── indicators.py     # RSI 등 기술 지표
+│       ├── swings.py         # 스윙 고점/저점 감지
+│       ├── divergence.py     # 다이버전스 연계 감지
+│       ├── fibonacci.py      # 피보나치 되돌림
+│       └── scanner.py        # 핵심 스캔 엔진
+├── requirements.txt
+├── render.yaml
+├── Procfile
+├── runtime.txt
+├── .gitignore
+└── README.md
+```
+
+---
+
+## ⚠️ 주의사항
+
+- 이 스캐너는 **투자 보조 도구**입니다
+- 모든 투자 판단은 **본인 책임**입니다
+- **역지정(손절) 없는 매매는 절대 금지**
+- 차트에 100%는 없습니다 — 반드시 분할 매수 + 손절 설정
+
+---
+
+*제이드 파동 심화 이론 기반 | 차트로 먹고살기 (coinfolio.kr)*
