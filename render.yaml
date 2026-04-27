@@ -1,13 +1,16 @@
 services:
   - type: web
-    name: jade-coin-scanner
+    name: stock-farming-scanner
     env: python
-    region: singapore
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PYTHONUNBUFFERED
-        value: "1"
-    healthCheckPath: /health
-    autoDeploy: true
+      - key: SCAN_MARKET
+        value: ALL
+      - key: SCAN_LIMIT
+        value: 250
+      - key: MIN_AVG_TRADING_VALUE
+        value: 2000000000
+      - key: TARGET_RETURN
+        value: 0.10
