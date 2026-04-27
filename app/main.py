@@ -11,7 +11,7 @@ from strategy.scanner import scan, scan_single
 
 app = FastAPI(
     title="Stock Farming Scanner",
-    version="1.1.0",
+    version="1.2.0",
     description="농사매매법 기반 국내 주식 후보 스캐너"
 )
 
@@ -33,7 +33,7 @@ def root():
     return safe_response({
         "service": "stock-farming-scanner",
         "strategy": "농사매매법",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "endpoints": ["/health", "/main", "/sub", "/scan", "/ticker/{ticker}", "/debug"]
     })
 
@@ -47,7 +47,7 @@ def health():
         "scan_market": settings.scan_market,
         "scan_limit": settings.scan_limit,
         "min_avg_trading_value": settings.min_avg_trading_value,
-        "version": "1.1.0"
+        "version": "1.2.0"
     })
 
 
@@ -61,7 +61,7 @@ def main_scan(limit: int = Query(default=settings.scan_limit, ge=1, le=500)):
             "endpoint": "/main",
             "message": str(e),
             "trace_tail": traceback.format_exc().splitlines()[-8:],
-            "hint": "Render 로그와 pykrx/KRX 응답 상태를 확인하세요. v1.1은 500 대신 진단 JSON을 반환합니다."
+            "hint": "Render 로그와 pykrx/KRX 응답 상태를 확인하세요. v1.2은 500 대신 진단 JSON을 반환합니다."
         }, status_code=200)
 
 
@@ -75,7 +75,7 @@ def sub_scan(limit: int = Query(default=settings.scan_limit, ge=1, le=500)):
             "endpoint": "/sub",
             "message": str(e),
             "trace_tail": traceback.format_exc().splitlines()[-8:],
-            "hint": "Render 로그와 pykrx/KRX 응답 상태를 확인하세요. v1.1은 500 대신 진단 JSON을 반환합니다."
+            "hint": "Render 로그와 pykrx/KRX 응답 상태를 확인하세요. v1.2은 500 대신 진단 JSON을 반환합니다."
         }, status_code=200)
 
 
