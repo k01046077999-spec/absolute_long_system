@@ -11,7 +11,7 @@ from strategy.scanner import scan, scan_single
 
 app = FastAPI(
     title="Stock Farming Scanner",
-    version="1.2.0",
+    version="1.3.0",
     description="농사매매법 기반 국내 주식 후보 스캐너"
 )
 
@@ -33,7 +33,7 @@ def root():
     return safe_response({
         "service": "stock-farming-scanner",
         "strategy": "농사매매법",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "endpoints": ["/health", "/main", "/sub", "/scan", "/ticker/{ticker}", "/debug"]
     })
 
@@ -47,7 +47,7 @@ def health():
         "scan_market": settings.scan_market,
         "scan_limit": settings.scan_limit,
         "min_avg_trading_value": settings.min_avg_trading_value,
-        "version": "1.2.0"
+        "version": "1.3.0"
     })
 
 

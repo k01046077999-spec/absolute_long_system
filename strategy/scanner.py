@@ -79,10 +79,13 @@ def scan(mode: str = "main", limit: int | None = None) -> dict:
             continue
 
     candidates = sorted(candidates, key=lambda x: x.get("score", 0), reverse=True)
+    if mode == "sub":
+        candidates = candidates[:20]
     return {
         "strategy": "농사매매법",
         "mode": mode,
         "count": len(candidates),
+        "note": "main은 엄격한 실매수 후보, sub는 조건 근접 관찰 후보 TOP 랭킹입니다." if mode == "sub" else "main은 엄격한 A타입 실매수 후보만 반환합니다.",
         "scanned_tickers": len(tickers),
         "loaded_ohlcv": len(frames),
         "candidates": candidates,
