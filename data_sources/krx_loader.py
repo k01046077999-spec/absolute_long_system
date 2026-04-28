@@ -40,7 +40,7 @@ def _recent_dates(max_back_days: int = 14) -> list[str]:
 def _load_seed_tickers(limit: int | None = None) -> List[str]:
     try:
         payload = json.loads(SEED_TICKER_PATH.read_text(encoding="utf-8"))
-        tickers = [str(t).zfill(6) for t in payload.get("tickers", [])]
+        tickers = [str(t).zfill(6) for t in (payload.get("tickers", []) if isinstance(payload, dict) else payload)]
         return tickers[:limit] if limit else tickers
     except Exception:
         return []
