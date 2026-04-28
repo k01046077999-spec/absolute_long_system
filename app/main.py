@@ -11,7 +11,7 @@ from strategy.scanner import scan, scan_single
 
 app = FastAPI(
     title="Stock Farming Scanner",
-    version="1.4.0",
+    version="1.5.0",
     description="농사매매법 기반 국내 주식 후보 스캐너"
 )
 
@@ -37,34 +37,41 @@ def compact_candidate(item: dict) -> dict:
     db = metrics.get("double_bottom", {}) or {}
     concrete = metrics.get("concrete_support", {}) or {}
     fin = item.get("financial_health", {}) or {}
+    conditions = item.get("conditions", []) or []
+    risks = item.get("risks", []) or []
+    reject_flags = item.get("reject_flags", []) or []
+    pass_flags = []
+    if ma224.get("pass"): pass_flags.append("224일선 아래")
+    if db.get("pass"): pass_flags.append("쌍바닥")
+    if concrete.get("pass"): pass_flags.append("공구리")
+    if money.get("pass"): pass_flags.append("거래대금")
+    if resistance.get("pass"): pass_flags.append("10% 여유")
+    fail_reason = (reject_flags or risks or conditions or [None])[0]
     return {
-        "type": item.get("type"),
-        "ticker": item.get("ticker"),
-        "name": item.get("name"),
-        "sector": item.get("sector"),
-        "themes": item.get("themes", []),
-        "current_price": item.get("current_price"),
-        "target_price": item.get("target_price"),
-        "target_return": item.get("target_return"),
-        "score": item.get("score"),
-        "decision": item.get("decision"),
-        "conditions": item.get("conditions", []),
-        "risks": item.get("risks", []),
-        "reject_flags": item.get("reject_flags", []),
-        "quick_metrics": {
-            "ma224_pass": ma224.get("pass"),
-            "double_bottom_pass": db.get("pass"),
-            "concrete_support_pass": concrete.get("pass"),
-            "money_flow_pass": money.get("pass"),
-            "avg_trading_value_20d": money.get("avg_trading_value_20d"),
+        "type": item.get("type"), "ticker": item.get("ticker"), "name": item.get("name"),
+        "price": item.get("current_price"), "target_price": item.get("target_price"),
+        "score": item.get("score"), "decision": item.get("decision"),
+        "sector": item.get("sector"), "themes": item.get("themes", [])[:3],
+        "pass_flags": pass_flags, "fail_reason": fail_reason,
+        "key_metrics": {
             "value_ratio": money.get("value_ratio"),
+            "avg_trading_value_20d": money.get("avg_trading_value_20d"),
             "sector_status": sector_strength.get("sector_status"),
-            "sector_score": sector_strength.get("sector_score"),
             "resistance_gap_pct": resistance.get("gap_pct"),
             "financial_status": fin.get("status"),
-            "financial_risk_grade": fin.get("risk_grade"),
-            "delisting_risk": fin.get("delisting_risk"),
-        }
+        },
+    }
+
+
+def tiny_candidate(item: dict) -> dict:
+    metrics = item.get("metrics", {}) or {}
+    money = metrics.get("money_flow", {}) or {}
+    resistance = metrics.get("resistance_gap", {}) or {}
+    return {
+        "type": item.get("type"), "ticker": item.get("ticker"), "name": item.get("name"),
+        "price": item.get("current_price"), "score": item.get("score"), "decision": item.get("decision"),
+        "value_ratio": money.get("value_ratio"), "resistance_gap_pct": resistance.get("gap_pct"),
+        "reason": (item.get("reject_flags", []) or item.get("risks", []) or item.get("conditions", []) or [None])[0],
     }
 
 
@@ -89,8 +96,8 @@ def root():
     return safe_response({
         "service": "stock-farming-scanner",
         "strategy": "농사매매법",
-        "version": "1.4.0",
-        "endpoints": ["/health", "/summary", "/main", "/sub", "/main/simple", "/sub/simple", "/scan", "/ticker/{ticker}", "/debug"]
+        "version": "1.5.0",
+        "endpoints": ["/health", "/summary", "/main", "/sub", "/main/simple", "/sub/simple", "/main/tiny", "/sub/tiny", "/scan", "/ticker/{ticker}", "/debug"]
     })
 
 
@@ -103,7 +110,7 @@ def health():
         "scan_market": settings.scan_market,
         "scan_limit": settings.scan_limit,
         "min_avg_trading_value": settings.min_avg_trading_value,
-        "version": "1.4.0"
+        "version": "1.5.0"
     })
 
 
@@ -137,6 +144,38 @@ def sub_simple(limit: int = Query(default=settings.scan_limit, ge=1, le=500)):
         return safe_response(compact_scan(mode="sub", limit=limit))
     except Exception as e:
         return safe_response({"status": "error", "endpoint": "/sub/simple", "message": str(e), "trace_tail": traceback.format_exc().splitlines()[-8:]}, status_code=200)
+
+
+@app.get("/sub/tiny")
+def sub_tiny(limit: int = Query(default=30, ge=1, le=500)):
+    try:
+        result = scan(mode="sub", limit=limit)
+        candidates = result.get("candidates", [])
+        return safe_response({
+            "strategy": "농사매매법",
+            "mode": "sub_tiny",
+            "count": len(candidates),
+            "meaning": "관찰 후보 요약입니다. A/B만 매수 검토, WATCH는 관찰만.",
+            "candidates": [tiny_candidate(x) for x in candidates],
+        })
+    except Exception as e:
+        return safe_response({"status": "error", "endpoint": "/sub/tiny", "message": str(e), "trace_tail": traceback.format_exc().splitlines()[-8:]}, status_code=200)
+
+
+@app.get("/main/tiny")
+def main_tiny(limit: int = Query(default=30, ge=1, le=500)):
+    try:
+        result = scan(mode="main", limit=limit)
+        candidates = result.get("candidates", [])
+        return safe_response({
+            "strategy": "농사매매법",
+            "mode": "main_tiny",
+            "count": len(candidates),
+            "meaning": "실매수 후보 요약입니다. count 0이면 현재 A타입 없음.",
+            "candidates": [tiny_candidate(x) for x in candidates],
+        })
+    except Exception as e:
+        return safe_response({"status": "error", "endpoint": "/main/tiny", "message": str(e), "trace_tail": traceback.format_exc().splitlines()[-8:]}, status_code=200)
 
 
 @app.get("/summary")
