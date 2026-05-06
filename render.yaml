@@ -1,34 +1,18 @@
 services:
-  # ── Web Service (FastAPI 스캐너) ──
   - type: web
     name: dante-scanner
     runtime: python
-    region: singapore          # 한국에서 가장 가까운 리전
-    plan: free                 # 무료 플랜 (월 750시간)
+    region: singapore
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: DATA_DIR
+        value: /var/data
     disk:
       name: scan-data
-      mountPath: /app/data
-      sizeGB: 1               # 결과 JSON 저장용 영구 디스크
-
-  # ── Cron Job (장 마감 후 자동 스캔) ──
-  - type: cron
-    name: dante-scanner-cron
-    runtime: python
-    region: singapore
-    plan: starter             # Cron은 starter 이상 필요
-    schedule: "40 6 * * 1-5" # 평일 15:40 KST (UTC+9 → 06:40 UTC)
-    buildCommand: pip install -r requirements.txt
-    startCommand: python cron_scan.py
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.0"
-    disk:
-      name: scan-data
-      mountPath: /app/data
+      mountPath: /var/data
       sizeGB: 1
