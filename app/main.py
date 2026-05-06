@@ -18,7 +18,11 @@ app.add_middleware(
 )
 
 BASE_DIR = Path(__file__).parent.parent
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+# static 폴더 없으면 자동 생성 (Render 배포 시 빈 폴더가 누락되는 문제 방지)
+STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
