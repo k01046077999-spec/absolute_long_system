@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주식단테 농사매매 스캐너</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #22263a;
+    --border: #2e3250;
+    --text: #e8eaf6;
+    --muted: #8b92b8;
+    --green: #00e676;
+    --green2: #1de9b6;
+    --amber: #ffab40;
+    --red: #ff5252;
+    --blue: #448aff;
+    --purple: #ce93d8;
+    --card-r: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Pretendard', 'Apple SD Gothic Neo', sans-serif; min-height: 100vh; }
+
+  /* ── 헤더 ── */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo svg { color: var(--green); }
+  .logo h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+  .logo span { font-size: 12px; color: var(--muted); }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  #last-updated { font-size: 12px; color: var(--muted); }
+
+  /* ── 버튼 ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px; border: none;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--green); color: #0a1a0a; }
+  .btn-primary:hover { background: #00c853; }
+  .btn-primary:disabled { background: var(--bg3); color: var(--muted); cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+
+  /* ── 레이아웃 ── */
+  main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* ── 스탯 카드 ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    padding: 16px 20px;
+  }
+  .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .stat-card .val { font-size: 28px; font-weight: 700; line-height: 1; }
+  .stat-card .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .val-green { color: var(--green); }
+  .val-amber { color: var(--amber); }
+  .val-blue { color: var(--blue); }
+  .val-purple { color: var(--purple); }
+
+  /* ── 필터 바 ── */
+  .filter-bar {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .filter-bar label { font-size: 12px; color: var(--muted); }
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 99px;
+    border: 1px solid var(--border);
+    background: transparent; color: var(--muted);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-chip:hover { border-color: var(--muted); color: var(--text); }
+  .filter-chip.active { border-color: var(--green); color: var(--green); background: rgba(0,230,118,0.08); }
+  .filter-chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .dot-green { background: var(--green); }
+  .dot-amber { background: var(--amber); }
+  .dot-blue { background: var(--blue); }
+  .dot-purple { background: var(--purple); }
+  .dot-all { background: var(--muted); }
+
+  .search-input {
+    flex: 1; min-width: 180px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 12px; border-radius: 8px;
+    font-size: 13px; outline: none;
+  }
+  .search-input:focus { border-color: var(--blue); }
+  .search-input::placeholder { color: var(--muted); }
+
+  select.filter-select {
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 10px; border-radius: 8px;
+    font-size: 12px; outline: none; cursor: pointer;
+  }
+
+  /* ── 테이블 ── */
+  .table-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: var(--bg3); }
+  th {
+    padding: 12px 16px; text-align: left;
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    white-space: nowrap; cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid var(--border);
+  }
+  th:hover { color: var(--text); }
+  th .sort-icon { margin-left: 4px; opacity: 0.5; }
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(46,50,80,0.5);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .ticker-cell { display: flex; align-items: center; gap: 10px; }
+  .ticker-code { font-size: 11px; color: var(--muted); }
+  .ticker-name { font-weight: 500; }
+
+  /* 신호 배지 */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 99px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+  }
+  .badge-ipyeong { background: rgba(0,230,118,0.12); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
+  .badge-256 { background: rgba(68,138,255,0.12); color: var(--blue); border: 1px solid rgba(68,138,255,0.3); }
+  .badge-bab { background: rgba(255,171,64,0.12); color: var(--amber); border: 1px solid rgba(255,171,64,0.3); }
+  .badge-256long { background: rgba(206,147,216,0.12); color: var(--purple); border: 1px solid rgba(206,147,216,0.3); }
+
+  /* 시장 배지 */
+  .market-badge {
+    font-size: 10px; padding: 2px 7px; border-radius: 4px;
+    font-weight: 500;
+  }
+  .market-kospi { background: rgba(68,138,255,0.15); color: var(--blue); }
+  .market-kosdaq { background: rgba(206,147,216,0.15); color: var(--purple); }
+
+  .price { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .target { color: var(--amber); font-weight: 500; }
+  .stopline { color: var(--red); font-size: 12px; }
+
+  .vol-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .vol-bar-bg { width: 60px; height: 4px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
+  .vol-bar { height: 100%; border-radius: 99px; background: var(--green); }
+  .vol-num { font-size: 12px; color: var(--muted); min-width: 32px; }
+
+  .maengzip-yes { color: var(--green); font-size: 11px; font-weight: 600; }
+  .maengzip-no { color: var(--muted); font-size: 11px; }
+
+  /* ── 빈 상태 ── */
+  .empty-state {
+    text-align: center; padding: 80px 20px;
+    color: var(--muted);
+  }
+  .empty-state svg { margin-bottom: 16px; opacity: 0.3; }
+  .empty-state h3 { font-size: 16px; font-weight: 500; margin-bottom: 8px; color: var(--text); }
+  .empty-state p { font-size: 13px; line-height: 1.6; }
+
+  /* ── 프로그레스 ── */
+  #progress-bar-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    padding: 20px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  #progress-bar-wrap.visible { display: block; }
+  .progress-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }
+  .progress-bg { height: 6px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--green2)); border-radius: 99px; transition: width 0.5s ease; }
+
+  /* ── 기법 설명 패널 ── */
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .info-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    padding: 16px;
+  }
+  .info-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .info-card p { font-size: 11px; color: var(--muted); line-height: 1.7; }
+  .info-card .cond { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .cond-item { display: flex; gap: 6px; margin-bottom: 3px; }
+  .cond-item::before { content: "✓"; color: var(--green); font-size: 10px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── 페이지네이션 ── */
+  .pagination {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--muted);
+  }
+  .page-btns { display: flex; gap: 6px; }
+  .page-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); cursor: pointer; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.1s;
+  }
+  .page-btn:hover { border-color: var(--muted); color: var(--text); }
+  .page-btn.active { background: var(--green); color: #0a1a0a; border-color: var(--green); font-weight: 600; }
+
+  /* ── 상태 표시 ── */
+  .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.5; transform:scale(0.8); } }
+
+  /* ── 반응형 ── */
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .info-grid { grid-template-columns: repeat(2, 1fr); }
+    td.hide-sm, th.hide-sm { display: none; }
+  }
+  @media (max-width: 600px) {
+    main { padding: 12px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .info-grid { grid-template-columns: 1fr; }
+    header { padding: 0 12px; }
+  }
+
+  .tooltip {
+    position: relative; cursor: help;
+  }
+  .tooltip:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    background: #1e2235; border: 1px solid var(--border);
+    color: var(--text); font-size: 11px; padding: 6px 10px; border-radius: 6px;
+    white-space: nowrap; z-index: 200; pointer-events: none;
+  }
+
+  /* 스크롤바 */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<header>
+  <div class="logo">
+    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path d="M2 20h20M6 20V10l6-8 6 8v10M10 20v-5h4v5"/>
+    </svg>
+    <div>
+      <h1>농사매매 스캐너</h1>
+      <span>단테 기법 — 이평때리기 · 256 · 밥그릇3번</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="last-updated">마지막 스캔: —</span>
+    <button class="btn btn-ghost" onclick="loadResults()">새로고침</button>
+    <button class="btn btn-primary" id="scan-btn" onclick="triggerScan()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      전체 스캔
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- 기법 설명 -->
+  <div class="info-grid">
+    <div class="info-card">
+      <h4 style="color:var(--green)">🌾 이평 때리기</h4>
+      <div class="cond">
+        <div class="cond-item">112 &lt; 224 &lt; 448 역배열</div>
+        <div class="cond-item">오늘 종가 112일선 돌파</div>
+        <div class="cond-item">전일 종가 112일선 미만</div>
+        <div class="cond-item">거래량 전일比 150%+</div>
+      </div>
+    </div>
+    <div class="info-card">
+      <h4 style="color:var(--blue)">📐 256 기법</h4>
+      <div class="cond">
+        <div class="cond-item">5일선 ↑ 20일선 골든크로스</div>
+        <div class="cond-item">현재가 60일선 위</div>
+        <div class="cond-item">매집봉 존재 시 확률↑</div>
+        <div class="cond-item">손절: 20일선 이탈</div>
+      </div>
+    </div>
+    <div class="info-card">
+      <h4 style="color:var(--amber)">🍚 밥그릇 3번</h4>
+      <div class="cond">
+        <div class="cond-item">5일선 ↑ 224일선 골든크로스</div>
+        <div class="cond-item">112일선 > 224일선</div>
+        <div class="cond-item">목표: 448일선</div>
+        <div class="cond-item">손절: 224일선 -3%</div>
+      </div>
+    </div>
+    <div class="info-card">
+      <h4 style="color:var(--purple)">📏 256 장기</h4>
+      <div class="cond">
+        <div class="cond-item">5일선 ↑ 112일선 골든크로스</div>
+        <div class="cond-item">현재가 112일선 위</div>
+        <div class="cond-item">목표: 224일선</div>
+        <div class="cond-item">손절: 112일선 -3%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스탯 카드 -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="label">총 발견</div>
+      <div class="val val-green" id="stat-found">—</div>
+      <div class="sub" id="stat-found-sub">종목</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">이평때리기</div>
+      <div class="val val-green" id="stat-ipyeong">—</div>
+      <div class="sub">역배열 돌파</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">256 기법</div>
+      <div class="val val-blue" id="stat-256">—</div>
+      <div class="sub">골든크로스</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">스캔 종목 수</div>
+      <div class="val val-amber" id="stat-total">—</div>
+      <div class="sub" id="stat-time">전 종목</div>
+    </div>
+  </div>
+
+  <!-- 프로그레스 바 -->
+  <div id="progress-bar-wrap">
+    <div class="progress-header">
+      <span><span class="pulse"></span> &nbsp;스캔 진행 중...</span>
+      <span id="progress-text">0 / 0</span>
+    </div>
+    <div class="progress-bg">
+      <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- 필터 -->
+  <div class="filter-bar">
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="filter-chip active" data-signal="전체" onclick="setFilter('전체',this)">
+        <span class="dot dot-all"></span>전체
+      </button>
+      <button class="filter-chip" data-signal="이평때리기" onclick="setFilter('이평때리기',this)">
+        <span class="dot dot-green"></span>이평때리기
+      </button>
+      <button class="filter-chip" data-signal="256기법" onclick="setFilter('256기법',this)">
+        <span class="dot dot-blue"></span>256기법
+      </button>
+      <button class="filter-chip" data-signal="밥그릇3번" onclick="setFilter('밥그릇3번',this)">
+        <span class="dot dot-amber"></span>밥그릇3번
+      </button>
+      <button class="filter-chip" data-signal="256장기" onclick="setFilter('256장기',this)">
+        <span class="dot dot-purple"></span>256장기
+      </button>
+    </div>
+    <select class="filter-select" id="market-filter" onchange="renderTable()">
+      <option value="">전체 시장</option>
+      <option value="KOSPI">KOSPI</option>
+      <option value="KOSDAQ">KOSDAQ</option>
+    </select>
+    <input class="search-input" id="search-input" placeholder="종목명·코드 검색" oninput="renderTable()" />
+    <select class="filter-select" id="sort-select" onchange="renderTable()">
+      <option value="default">기본 정렬</option>
+      <option value="vol_ratio">거래량비율↓</option>
+      <option value="close_asc">주가↑</option>
+      <option value="close_desc">주가↓</option>
+    </select>
+  </div>
+
+  <!-- 테이블 -->
+  <div class="table-wrap">
+    <div id="table-container">
+      <div class="empty-state">
+        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <h3>스캔 결과가 없습니다</h3>
+        <p>우측 상단의 <strong>전체 스캔</strong> 버튼을 클릭하면<br>KOSPI·KOSDAQ 전 종목을 분석합니다.</p>
+      </div>
+    </div>
+    <div class="pagination" id="pagination" style="display:none">
+      <span id="page-info"></span>
+      <div class="page-btns" id="page-btns"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── 상태 ──
+let allData = [];
+let filtered = [];
+let currentFilter = '전체';
+let currentPage = 1;
+const PAGE_SIZE = 50;
+let pollInterval = null;
+
+// ── 신호 배지 ──
+function badgeClass(signal) {
+  if (signal === '이평때리기') return 'badge-ipyeong';
+  if (signal === '256기법') return 'badge-256';
+  if (signal === '밥그릇3번') return 'badge-bab';
+  return 'badge-256long';
+}
+
+function fmt(n) { return typeof n === 'number' ? n.toLocaleString() : (n || '—'); }
+function fmtRatio(r) { return r ? r.toFixed(1) + 'x' : '—'; }
+
+// ── 필터 ──
+function setFilter(signal, el) {
+  currentFilter = signal;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  currentPage = 1;
+  renderTable();
+}
+
+function applyFilters() {
+  const marketF = document.getElementById('market-filter').value;
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const sort = document.getElementById('sort-select').value;
+
+  filtered = allData.filter(r => {
+    if (currentFilter !== '전체' && r.signal !== currentFilter) return false;
+    if (marketF && r.market !== marketF) return false;
+    if (search && !r.name.toLowerCase().includes(search) && !r.ticker.includes(search)) return false;
+    return true;
+  });
+
+  if (sort === 'vol_ratio') filtered.sort((a, b) => (b.vol_ratio||0) - (a.vol_ratio||0));
+  else if (sort === 'close_asc') filtered.sort((a, b) => a.close - b.close);
+  else if (sort === 'close_desc') filtered.sort((a, b) => b.close - a.close);
+}
+
+// ── 테이블 렌더 ──
+function renderTable() {
+  applyFilters();
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageData = filtered.slice(start, start + PAGE_SIZE);
+
+  const container = document.getElementById('table-container');
+
+  if (total === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <h3>조건에 맞는 종목이 없습니다</h3>
+        <p>필터를 변경하거나 스캔을 다시 실행해보세요.</p>
+      </div>`;
+    document.getElementById('pagination').style.display = 'none';
+    return;
+  }
+
+  const rows = pageData.map(r => {
+    const volBarW = Math.min(100, (r.vol_ratio || 0) / 5 * 100);
+    const volColor = r.vol_ratio >= 3 ? 'var(--amber)' : r.vol_ratio >= 1.5 ? 'var(--green)' : 'var(--blue)';
+    const maengzip = r.maengzip === true ? '<span class="maengzip-yes">✓ 매집봉</span>' : '<span class="maengzip-no">—</span>';
+    const kiwoomLink = `https://finance.naver.com/item/main.naver?code=${r.ticker}`;
+
+    let maInfo = '';
+    if (r.signal === '이평때리기') {
+      maInfo = `<span style="font-size:11px;color:var(--muted)">${fmt(r.ma112)} / ${fmt(r.ma224)} / ${fmt(r.ma448)}</span>`;
+    } else if (r.signal === '256기법') {
+      maInfo = `<span style="font-size:11px;color:var(--muted)">MA5:${fmt(r.ma5)} MA20:${fmt(r.ma20)}</span>`;
+    } else if (r.signal === '밥그릇3번') {
+      maInfo = `<span style="font-size:11px;color:var(--muted)">MA112:${fmt(r.ma112)} MA224:${fmt(r.ma224)}</span>`;
+    } else {
+      maInfo = `<span style="font-size:11px;color:var(--muted)">MA5:${fmt(r.ma5)} MA112:${fmt(r.ma112)}</span>`;
+    }
+
+    return `<tr>
+      <td>
+        <div class="ticker-cell">
+          <div>
+            <div class="ticker-name">
+              <a href="${kiwoomLink}" target="_blank" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text)'">${r.name}</a>
+            </div>
+            <div class="ticker-code">${r.ticker}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="market-badge ${r.market === 'KOSPI' ? 'market-kospi' : 'market-kosdaq'}">${r.market}</span></td>
+      <td><span class="badge ${badgeClass(r.signal)}">${r.signal}</span></td>
+      <td class="price">${fmt(r.close)}원</td>
+      <td class="target hide-sm">${fmt(r.target_price)}원</td>
+      <td class="stopline hide-sm">${fmt(r.stopline)}원</td>
+      <td class="hide-sm">
+        <div class="vol-bar-wrap">
+          <div class="vol-bar-bg"><div class="vol-bar" style="width:${volBarW}%;background:${volColor}"></div></div>
+          <span class="vol-num">${fmtRatio(r.vol_ratio)}</span>
+        </div>
+      </td>
+      <td class="hide-sm">${maInfo}</td>
+      <td class="hide-sm">${maengzip}</td>
+      <td style="font-size:11px;color:var(--muted)">${r.date || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>종목명</th>
+        <th>시장</th>
+        <th>신호</th>
+        <th>현재가</th>
+        <th class="hide-sm">목표가</th>
+        <th class="hide-sm">손절선</th>
+        <th class="hide-sm">거래량비율</th>
+        <th class="hide-sm">이평선</th>
+        <th class="hide-sm">매집봉</th>
+        <th>날짜</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  // 페이지네이션
+  const pg = document.getElementById('pagination');
+  pg.style.display = 'flex';
+  document.getElementById('page-info').textContent = `${start+1}–${Math.min(start+PAGE_SIZE, total)} / ${total}개`;
+
+  const btns = document.getElementById('page-btns');
+  let pgHtml = `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>‹</button>`;
+  const range = buildPageRange(currentPage, totalPages);
+  for (const p of range) {
+    if (p === '…') pgHtml += `<span style="padding:0 4px;color:var(--muted)">…</span>`;
+    else pgHtml += `<button class="page-btn${p===currentPage?' active':''}" onclick="goPage(${p})">${p}</button>`;
+  }
+  pgHtml += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>›</button>`;
+  btns.innerHTML = pgHtml;
+}
+
+function buildPageRange(cur, total) {
+  if (total <= 7) return Array.from({length:total},(_,i)=>i+1);
+  const r = [];
+  if (cur <= 4) { for(let i=1;i<=5;i++) r.push(i); r.push('…'); r.push(total); }
+  else if (cur >= total-3) { r.push(1); r.push('…'); for(let i=total-4;i<=total;i++) r.push(i); }
+  else { r.push(1); r.push('…'); for(let i=cur-1;i<=cur+1;i++) r.push(i); r.push('…'); r.push(total); }
+  return r;
+}
+
+function goPage(p) {
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  if (p < 1 || p > totalPages) return;
+  currentPage = p;
+  renderTable();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── 스탯 업데이트 ──
+function updateStats(data) {
+  const results = data.results || [];
+  document.getElementById('stat-found').textContent = results.length;
+  document.getElementById('stat-found-sub').textContent = `${data.scanned_at ? data.scanned_at.slice(0,10) : ''} 기준`;
+  document.getElementById('stat-ipyeong').textContent = results.filter(r=>r.signal==='이평때리기').length;
+  document.getElementById('stat-256').textContent = results.filter(r=>r.signal==='256기법' || r.signal==='256장기').length;
+  document.getElementById('stat-total').textContent = (data.total_scanned || 0).toLocaleString();
+  document.getElementById('stat-time').textContent = data.elapsed_sec ? `${data.elapsed_sec}초 소요` : '전 종목';
+  if (data.scanned_at) {
+    document.getElementById('last-updated').textContent = `마지막 스캔: ${data.scanned_at}`;
+  }
+}
+
+// ── 데이터 로드 ──
+async function loadResults() {
+  try {
+    const res = await fetch('/api/results');
+    const data = await res.json();
+    allData = data.results || [];
+    updateStats(data);
+    currentPage = 1;
+    renderTable();
+  } catch(e) {
+    console.error('결과 로드 실패:', e);
+  }
+}
+
+// ── 스캔 트리거 ──
+async function triggerScan() {
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.textContent = '스캔 중...';
+
+  try {
+    await fetch('/api/scan', {method:'POST'});
+    startPolling();
+  } catch(e) {
+    alert('스캔 시작 실패: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '전체 스캔';
+  }
+}
+
+// ── 폴링 ──
+function startPolling() {
+  document.getElementById('progress-bar-wrap').classList.add('visible');
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(pollStatus, 2000);
+}
+
+async function pollStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const status = await res.json();
+    const prog = document.getElementById('progress-bar-wrap');
+    const fill = document.getElementById('progress-fill');
+    const text = document.getElementById('progress-text');
+
+    if (status.running) {
+      const pct = status.total > 0 ? (status.progress / status.total * 100) : 0;
+      fill.style.width = pct.toFixed(1) + '%';
+      text.textContent = `${status.progress} / ${status.total} (${pct.toFixed(0)}%)`;
+    } else {
+      clearInterval(pollInterval);
+      pollInterval = null;
+      prog.classList.remove('visible');
+      fill.style.width = '0%';
+      const btn = document.getElementById('scan-btn');
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> 전체 스캔`;
+      await loadResults();
+    }
+  } catch(e) { console.error('폴링 오류:', e); }
+}
+
+// ── 초기 로드 ──
+loadResults();
+</script>
+</body>
+</html>
