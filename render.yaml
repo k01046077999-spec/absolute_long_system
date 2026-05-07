@@ -1,18 +1,20 @@
 services:
   - type: web
-    name: dante-scanner
-    runtime: python
-    region: singapore
+    name: nongsa-scanner
+    env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /api/health
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.0"
-      - key: DATA_DIR
-        value: /var/data
-    disk:
-      name: scan-data
-      mountPath: /var/data
-      sizeGB: 1
+      - key: DEFAULT_MARKET
+        value: ALL
+      - key: SCAN_LIMIT
+        value: 120
+      - key: MAX_RESULTS
+        value: 30
+      - key: MIN_TRADING_VALUE
+        value: 1500000000
+      - key: CACHE_TTL_SEC
+        value: 900
+      - key: PYKRX_SLEEP_SEC
+        value: 0.03
